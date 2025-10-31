@@ -1,4 +1,6 @@
 import React from "react";
+// eslint-disable-next-line no-unused-vars
+import { motion } from "framer-motion";
 import ProjectCard from "./ProjectCard";
 
 const Projects = () => {
@@ -31,14 +33,40 @@ const Projects = () => {
     },
   ];
 
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.2,
+      },
+    },
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, x: -50 },
+    visible: {
+      opacity: 1,
+      x: 0,
+      transition: { duration: 0.6 },
+    },
+  };
+
   return (
     <section id="projects">
       <h3 className="text-white font-semibold text-lg">Projects</h3>
-      <div className="mt-6 space-y-6">
+      <motion.div 
+        className="mt-6 space-y-6"
+        variants={containerVariants}
+        initial="hidden"
+        animate="visible"
+      >
         {projects.map((project, index) => (
-          <ProjectCard key={index} {...project} />
+          <motion.div key={index} variants={itemVariants}>
+            <ProjectCard {...project} />
+          </motion.div>
         ))}
-      </div>
+      </motion.div>
     </section>
   );
 };
