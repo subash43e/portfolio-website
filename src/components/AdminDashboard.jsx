@@ -9,7 +9,7 @@ const AdminDashboard = () => {
   async function handleLogout() {
     try {
       await logout();
-      navigate('/admin/login');
+      navigate('/owner/login');
     } catch (error) {
       console.error('Logout error:', error);
     }

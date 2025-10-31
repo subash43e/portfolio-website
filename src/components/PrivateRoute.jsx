@@ -5,5 +5,5 @@ import { useAuth } from '../hooks/useAuth';
 export default function PrivateRoute({ children }) {
   const { currentUser } = useAuth();
 
-  return currentUser ? children : <Navigate to="/admin/login" />;
+  return currentUser ? children : <Navigate to="/owner/login" />;
 }

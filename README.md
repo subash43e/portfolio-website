@@ -82,9 +82,9 @@ portfolio-website/
 - `/#projects` - Projects section (smooth scroll)
 - `/#contact` - Contact section (smooth scroll)
 
-### Admin Routes
-- `/admin/login` - Admin login page
-- `/admin` - Protected admin dashboard (requires authentication)
+### Owner Routes
+- `/owner/login` - Owner login page
+- `/owner` - Protected owner dashboard (requires authentication)
 
 ## Tech Stack
 

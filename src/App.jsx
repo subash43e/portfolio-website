@@ -37,9 +37,9 @@ function AppContent() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/blog" element={<Blog />} />
-          <Route path="/admin/login" element={<AdminLogin />} />
+          <Route path="/owner/login" element={<AdminLogin />} />
           <Route
-            path="/admin"
+            path="/owner"
             element={
               <PrivateRoute>
                 <AdminDashboard />
