@@ -1,4 +1,4 @@
-import React from 'react';
+import React from "react";
 
 const Skills = () => {
   return (
@@ -8,8 +8,22 @@ const Skills = () => {
         <div className="bg-slate-800 p-6 rounded-lg shadow">
           <h4 className="text-white font-medium mb-3">Frontend</h4>
           <div className="flex flex-wrap gap-2">
-            {['HTML5','CSS3','JavaScript','React','Vue.js','Tailwind CSS'].map(s => (
-              <span key={s} className="text-xs bg-slate-700 text-slate-200 px-3 py-1 rounded-full">{s}</span>
+            {[
+              "HTML5",
+              "CSS3",
+              "JavaScript",
+              "React",
+              "Tailwind CSS",
+              "shadcn/ui",
+              "Next.js",
+              "Vite",
+            ].map((s) => (
+              <span
+                key={s}
+                className="text-xs bg-slate-700 text-slate-200 px-3 py-1 rounded-full"
+              >
+                {s}
+              </span>
             ))}
           </div>
         </div>
@@ -17,17 +31,20 @@ const Skills = () => {
         <div className="bg-slate-800 p-6 rounded-lg shadow">
           <h4 className="text-white font-medium mb-3">Backend</h4>
           <div className="flex flex-wrap gap-2">
-            {['Node.js','Express','Python','Django','PHP'].map(s => (
-              <span key={s} className="text-xs bg-slate-700 text-slate-200 px-3 py-1 rounded-full">{s}</span>
-            ))}
-          </div>
-        </div>
-
-        <div className="bg-slate-800 p-6 rounded-lg shadow">
-          <h4 className="text-white font-medium mb-3">Databases</h4>
-          <div className="flex flex-wrap gap-2">
-            {['MongoDB','PostgreSQL','MySQL','Firebase'].map(s => (
-              <span key={s} className="text-xs bg-slate-700 text-slate-200 px-3 py-1 rounded-full">{s}</span>
+            {[
+              "Node.js",
+              "MongoDB",
+              "PostgreSQL",
+              "Firebase",
+              "REST APIs",
+              "JWT Authentication",
+            ].map((s) => (
+              <span
+                key={s}
+                className="text-xs bg-slate-700 text-slate-200 px-3 py-1 rounded-full"
+              >
+                {s}
+              </span>
             ))}
           </div>
         </div>
@@ -35,8 +52,19 @@ const Skills = () => {
         <div className="bg-slate-800 p-6 rounded-lg shadow">
           <h4 className="text-white font-medium mb-3">Tools</h4>
           <div className="flex flex-wrap gap-2">
-            {['Git','Docker','Webpack','Figma','Jira'].map(s => (
-              <span key={s} className="text-xs bg-slate-700 text-slate-200 px-3 py-1 rounded-full">{s}</span>
+            {[
+              "Git & GitHub",
+              "npm",
+              "VS Code",
+              "Linux",
+              "Vercel/Netlify (Deployment)",
+            ].map((s) => (
+              <span
+                key={s}
+                className="text-xs bg-slate-700 text-slate-200 px-3 py-1 rounded-full"
+              >
+                {s}
+              </span>
             ))}
           </div>
         </div>

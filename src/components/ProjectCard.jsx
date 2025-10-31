@@ -1,4 +1,3 @@
-import React from 'react';
 
 const ProjectCard = ({ title, description, tech, link, bgClass, innerBg }) => {
   return (
