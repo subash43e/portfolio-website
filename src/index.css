@@ -1,0 +1,11 @@
+@import "tailwindcss";
+
+/* small visual reset to ensure full height */
+html, body, #root {
+	height: 100%;
+}
+
+body {
+	background-color: #ffffff;
+	color: #111827; /* gray-900 */
+}
