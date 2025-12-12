@@ -1,26 +1,26 @@
-import React, { useState } from 'react';
-import { useAuth } from '../hooks/useAuth';
-import { useNavigate } from 'react-router-dom';
+import React, { useState } from "react";
+import { useAuth } from "../hooks/useAuth";
+import { useNavigate } from "react-router-dom";
 
 const AdminLogin = () => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
-  const navigate = useNavigate();
 
+  const navigate = useNavigate();
   async function handleSubmit(e) {
     e.preventDefault();
 
     try {
-      setError('');
+      setError("");
       setLoading(true);
       await login(email, password);
-      navigate('/owner');
+      navigate("/owner");
     } catch (error) {
-      setError('Failed to log in. Please check your credentials.');
-      console.error('Login error:', error);
+      setError("Failed to log in. Please check your credentials.");
+      console.error("Login error:", error);
     }
 
     setLoading(false);
@@ -32,9 +32,7 @@ const AdminLogin = () => {
         <h2 className="text-2xl font-bold mb-6 text-center">Admin Login</h2>
 
         {error && (
-          <div className="bg-red-600 text-white p-3 rounded mb-4">
-            {error}
-          </div>
+          <div className="bg-red-600 text-white p-3 rounded mb-4">{error}</div>
         )}
 
         <form onSubmit={handleSubmit}>
@@ -53,7 +51,10 @@ const AdminLogin = () => {
           </div>
 
           <div className="mb-6">
-            <label htmlFor="password" className="block text-sm font-medium mb-2">
+            <label
+              htmlFor="password"
+              className="block text-sm font-medium mb-2"
+            >
               Password
             </label>
             <input
@@ -71,7 +72,7 @@ const AdminLogin = () => {
             disabled={loading}
             className="w-full bg-cyan-600 hover:bg-cyan-700 text-slate-900 font-medium py-2 px-4 rounded-md transition duration-200 disabled:opacity-50"
           >
-            {loading ? 'Logging in...' : 'Log In'}
+            {loading ? "Logging in..." : "Log In"}
           </button>
         </form>
       </div>

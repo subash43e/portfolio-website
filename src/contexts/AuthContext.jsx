@@ -1,6 +1,10 @@
-import React, { createContext, useEffect, useState } from 'react';
-import { auth } from '../firebase';
-import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import { createContext, useEffect, useState } from "react";
+import { auth } from "../firebase";
+import {
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signOut,
+} from "firebase/auth";
 
 const AuthContext = createContext();
 
@@ -10,8 +14,13 @@ export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  function login(email, password) {
-    return signInWithEmailAndPassword(auth, email, password);
+  async function login(email, password) {
+    return await signInWithEmailAndPassword(auth, email, password).catch(
+      (error) => {
+        console.error("Login failed:", error);
+        throw error;
+      }
+    );
   }
 
   function logout() {
@@ -30,7 +39,7 @@ export function AuthProvider({ children }) {
   const value = {
     currentUser,
     login,
-    logout
+    logout,
   };
 
   return (
