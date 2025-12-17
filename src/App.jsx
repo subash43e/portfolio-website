@@ -5,10 +5,12 @@ import {
   Routes,
   Route,
   useLocation,
+  Navigate,
 } from "react-router-dom";
 import { useEffect } from "react";
 import { AuthProvider } from "./contexts/AuthContext";
 import Header from "./components/Header";
+import CreateBlog from "./components/CreateBlog";
 
 // Lazy load components for code splitting
 const Home = lazy(() => import("./components/Home"));
@@ -33,7 +35,13 @@ function AppContent() {
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 font-sans">
       <Header />
-      <Suspense fallback={<div className="flex justify-center items-center min-h-screen bg-slate-900 text-slate-100">Loading...</div>}>
+      <Suspense
+        fallback={
+          <div className="flex justify-center items-center min-h-screen bg-slate-900 text-slate-100">
+            Loading...
+          </div>
+        }
+      >
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/blog" element={<Blog />} />
@@ -46,6 +54,32 @@ function AppContent() {
               </PrivateRoute>
             }
           />
+          <Route
+            path="/owner/blog/create/"
+            element={
+              <PrivateRoute>
+                <CreateBlog />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/owner/blog/edit/:id"
+            element={
+              <PrivateRoute>
+                <AdminDashboard />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/owner/blog/manage"
+            element={
+              <PrivateRoute>
+                <AdminDashboard />
+              </PrivateRoute>
+            }
+          />
+
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>
     </div>

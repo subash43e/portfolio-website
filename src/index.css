@@ -1,11 +1,11 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
 
-/* small visual reset to ensure full height */
 html, body, #root {
 	height: 100%;
 }
 
 body {
 	background-color: #ffffff;
-	color: #111827; /* gray-900 */
+	color: #111827;
 }

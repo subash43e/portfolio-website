@@ -12,7 +12,6 @@ const AdminLogin = () => {
   const navigate = useNavigate();
   async function handleSubmit(e) {
     e.preventDefault();
-
     try {
       setError("");
       setLoading(true);
@@ -22,7 +21,6 @@ const AdminLogin = () => {
       setError("Failed to log in. Please check your credentials.");
       console.error("Login error:", error);
     }
-
     setLoading(false);
   }
 

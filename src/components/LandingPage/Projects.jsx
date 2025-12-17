@@ -1,7 +1,7 @@
 import React from "react";
 // eslint-disable-next-line no-unused-vars
 import { motion } from "framer-motion";
-import ProjectCard from "./ProjectCard";
+import ProjectCard from "../ProjectCard";
 
 const Projects = () => {
   const projects = [
