@@ -1,32 +1,26 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "../hooks/useAuth";
 import { useNavigate } from "react-router-dom";
-import { auth, db } from "../firebase"; // Needed for profile updates
-import { updateProfile } from "firebase/auth"; // Needed for profile updates
-import { doc, getDoc, setDoc } from "firebase/firestore"; // Needed for profile updates
-import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage"; // Needed for profile updates
-import Model from "./Model"; // Your existing Blog Modal
+import { auth, db } from "../firebase";
+import { updateProfile } from "firebase/auth";
+import { doc, getDoc, setDoc } from "firebase/firestore";
+import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import Model from "./Model";
 
-// ==========================================
-// INTERNAL COMPONENT: User Profile Modal
-// ==========================================
 const UserProfileModal = ({ isOpen, onClose }) => {
   const { currentUser } = useAuth();
-  
-  // State
+
   const [displayName, setDisplayName] = useState("");
   const [photoURL, setPhotoURL] = useState("");
   const [photoFile, setPhotoFile] = useState(null);
   const [previewPhoto, setPreviewPhoto] = useState("");
   const [bio, setBio] = useState("");
-  
-  // UI State
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [isEditing, setIsEditing] = useState(false);
 
-  // Initialize data when currentUser loads or modal opens
   useEffect(() => {
     if (currentUser && isOpen) {
       setDisplayName(currentUser.displayName || "");
@@ -72,21 +66,21 @@ const UserProfileModal = ({ isOpen, onClose }) => {
     try {
       let finalPhotoURL = photoURL;
 
-      // 1. Upload new photo to Firebase Storage if selected
       if (photoFile) {
         const storage = getStorage();
-        const photoRef = ref(storage, `user-profiles/${currentUser.uid}/${photoFile.name}`);
+        const photoRef = ref(
+          storage,
+          `user-profiles/${currentUser.uid}/${photoFile.name}`
+        );
         await uploadBytes(photoRef, photoFile);
         finalPhotoURL = await getDownloadURL(photoRef);
       }
 
-      // 2. Update Firebase Auth Profile
       await updateProfile(auth.currentUser, {
         displayName: displayName,
         photoURL: finalPhotoURL,
       });
 
-      // 3. Update Firestore User Document
       await setDoc(
         doc(db, "users", currentUser.uid),
         {
@@ -105,7 +99,6 @@ const UserProfileModal = ({ isOpen, onClose }) => {
       setPhotoFile(null);
       setPreviewPhoto("");
       setTimeout(() => setSuccess(""), 3000);
-
     } catch (err) {
       setError("Failed to update profile: " + err.message);
     } finally {
@@ -116,53 +109,150 @@ const UserProfileModal = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-slate-800 rounded-lg max-w-2xl w-full mx-4 p-8 shadow-2xl border border-slate-700" onClick={(e) => e.stopPropagation()}>
+    <div
+      className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="bg-slate-800 rounded-lg max-w-2xl w-full mx-4 p-8 shadow-2xl border border-slate-700"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-bold text-slate-100">User Profile</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors text-2xl">✕</button>
+          <button
+            onClick={onClose}
+            className="text-slate-400 hover:text-white transition-colors text-2xl"
+          >
+            ✕
+          </button>
         </div>
 
-        {error && <div className="bg-red-500/10 border border-red-500 text-red-500 p-4 rounded mb-4">{error}</div>}
-        {success && <div className="bg-green-500/10 border border-green-500 text-green-500 p-4 rounded mb-4">{success}</div>}
+        {error && (
+          <div className="bg-red-500/10 border border-red-500 text-red-500 p-4 rounded mb-4">
+            {error}
+          </div>
+        )}
+        {success && (
+          <div className="bg-green-500/10 border border-green-500 text-green-500 p-4 rounded mb-4">
+            {success}
+          </div>
+        )}
 
         {!isEditing ? (
           <div className="space-y-6">
             <div className="flex items-center gap-6">
-              <img src={photoURL || "https://via.placeholder.com/150"} alt="User Avatar" className="w-32 h-32 rounded-full object-cover border-4 border-cyan-600 shadow-lg" />
+              {photoURL && photoURL.trim() ? (
+                <img
+                  src={photoURL}
+                  alt="User Avatar"
+                  className="w-32 h-32 rounded-full object-cover border-4 border-cyan-600 shadow-lg"
+                />
+              ) : (
+                <div className="w-32 h-32 rounded-full bg-gradient-to-br from-cyan-500 to-cyan-700 border-4 border-cyan-600 shadow-lg flex items-center justify-center">
+                  <span className="text-4xl font-bold text-white">
+                    {(displayName || "U").charAt(0).toUpperCase()}
+                  </span>
+                </div>
+              )}
               <div className="flex-1">
-                <h3 className="text-2xl font-bold text-slate-100">{displayName || "User"}</h3>
+                <h3 className="text-2xl font-bold text-slate-100">
+                  {displayName || "User"}
+                </h3>
                 <p className="text-slate-400 mb-2">{currentUser?.email}</p>
-                <p className="text-slate-300 mb-4 bg-slate-900/50 p-3 rounded-md min-h-[60px]">{bio || "No bio added yet"}</p>
+                <p className="text-slate-300 mb-4 bg-slate-900/50 p-3 rounded-md min-h-15">
+                  {bio || "No bio added yet"}
+                </p>
               </div>
             </div>
             <div className="flex justify-end">
-              <button onClick={() => setIsEditing(true)} className="bg-cyan-600 hover:bg-cyan-700 text-white font-medium py-2 px-6 rounded-md shadow-lg shadow-cyan-600/20">Edit Profile</button>
+              <button
+                onClick={() => setIsEditing(true)}
+                className="bg-cyan-600 hover:bg-cyan-700 text-white font-medium py-2 px-6 rounded-md shadow-lg shadow-cyan-600/20"
+              >
+                Edit Profile
+              </button>
             </div>
           </div>
         ) : (
           <form onSubmit={handleSaveProfile} className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-3">Profile Photo</label>
+              <label className="block text-sm font-medium text-slate-300 mb-3">
+                Profile Photo
+              </label>
               <div className="flex items-center gap-6">
-                <img src={previewPhoto || photoURL || "https://via.placeholder.com/150"} alt="User Avatar" className="w-32 h-32 rounded-full object-cover border-4 border-cyan-600" />
+                {(previewPhoto && previewPhoto.trim()) || (photoURL && photoURL.trim()) ? (
+                  <img
+                    src={previewPhoto || photoURL}
+                    alt="User Avatar"
+                    className="w-32 h-32 rounded-full object-cover border-4 border-cyan-600"
+                  />
+                ) : (
+                  <div className="w-32 h-32 rounded-full bg-gradient-to-br from-cyan-500 to-cyan-700 border-4 border-cyan-600 flex items-center justify-center">
+                    <span className="text-4xl font-bold text-white">
+                      {(displayName || "U").charAt(0).toUpperCase()}
+                    </span>
+                  </div>
+                )}
                 <div>
-                  <label htmlFor="photo" className="bg-slate-700 hover:bg-slate-600 text-slate-100 px-4 py-2 rounded-md cursor-pointer border border-slate-600">Choose New Photo</label>
-                  <input id="photo" type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" />
+                  <label
+                    htmlFor="photo"
+                    className="bg-slate-700 hover:bg-slate-600 text-slate-100 px-4 py-2 rounded-md cursor-pointer border border-slate-600"
+                  >
+                    Choose New Photo
+                  </label>
+                  <input
+                    id="photo"
+                    type="file"
+                    accept="image/*"
+                    onChange={handlePhotoChange}
+                    className="hidden"
+                  />
                 </div>
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">Username</label>
-              <input type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)} className="w-full px-4 py-2 bg-slate-900/50 border border-slate-600 rounded-md text-slate-100 focus:ring-2 focus:ring-cyan-500" required />
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Username
+              </label>
+              <input
+                type="text"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                className="w-full px-4 py-2 bg-slate-900/50 border border-slate-600 rounded-md text-slate-100 focus:ring-2 focus:ring-cyan-500"
+                required
+              />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">Bio</label>
-              <textarea value={bio} onChange={(e) => setBio(e.target.value)} className="w-full px-4 py-2 bg-slate-900/50 border border-slate-600 rounded-md text-slate-100 focus:ring-2 focus:ring-cyan-500 resize-none" rows="4"></textarea>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Bio
+              </label>
+              <textarea
+                value={bio}
+                onChange={(e) => setBio(e.target.value)}
+                className="w-full px-4 py-2 bg-slate-900/50 border border-slate-600 rounded-md text-slate-100 focus:ring-2 focus:ring-cyan-500 resize-none"
+                rows="4"
+              ></textarea>
             </div>
             <div className="flex gap-4 justify-end pt-4 border-t border-slate-700">
-              <button type="button" onClick={() => { setIsEditing(false); setPreviewPhoto(""); setPhotoFile(null); fetchUserProfile(); }} className="bg-transparent border border-slate-600 text-slate-300 hover:bg-slate-700 py-2 px-6 rounded-md">Cancel</button>
-              <button type="submit" disabled={loading} className="bg-cyan-600 hover:bg-cyan-700 text-white py-2 px-6 rounded-md disabled:opacity-50">{loading ? "Saving..." : "Save Changes"}</button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsEditing(false);
+                  setPreviewPhoto("");
+                  setPhotoFile(null);
+                  fetchUserProfile();
+                }}
+                className="bg-transparent border border-slate-600 text-slate-300 hover:bg-slate-700 py-2 px-6 rounded-md"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={loading}
+                className="bg-cyan-600 hover:bg-cyan-700 text-white py-2 px-6 rounded-md disabled:opacity-50"
+              >
+                {loading ? "Saving..." : "Save Changes"}
+              </button>
             </div>
           </form>
         )}
@@ -171,9 +261,6 @@ const UserProfileModal = ({ isOpen, onClose }) => {
   );
 };
 
-// ==========================================
-// MAIN COMPONENT: Admin Dashboard
-// ==========================================
 const AdminDashboard = () => {
   const [showBlogModal, setShowBlogModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -191,15 +278,13 @@ const AdminDashboard = () => {
   }
 
   const toggleBlogModal = (e) => {
-    if (e) e.preventDefault(); 
+    if (e) e.preventDefault();
     setShowBlogModal(!showBlogModal);
   };
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100">
       <div className="max-w-6xl mx-auto px-6 py-8">
-        
-        {/* --- Header Section --- */}
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-bold">Admin Dashboard</h1>
           <div className="flex items-center gap-4">
@@ -212,10 +297,9 @@ const AdminDashboard = () => {
           </div>
         </div>
 
-        {/* --- User Profile Card --- */}
-        <div className="mb-8 bg-gradient-to-r from-cyan-900/80 to-slate-800 p-6 rounded-lg border border-cyan-700/30 shadow-xl backdrop-blur-sm">
+        <div className="mb-8 bg-linear-to-r from-cyan-900/80 to-slate-800 p-6 rounded-lg border border-cyan-700/30 shadow-xl backdrop-blur-sm">
           <div className="flex flex-col md:flex-row items-center gap-6 text-center md:text-left">
-            {currentUser?.photoURL ? (
+            {currentUser?.photoURL && currentUser.photoURL.trim() ? (
               <img
                 src={currentUser.photoURL}
                 alt="Profile"
@@ -248,10 +332,11 @@ const AdminDashboard = () => {
           </div>
         </div>
 
-        {/* --- Management Grid --- */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="bg-slate-800 p-6 rounded-lg border border-slate-700 hover:border-cyan-500/50 transition-colors">
-            <h2 className="text-xl font-semibold mb-2 text-cyan-400">Blog Management</h2>
+            <h2 className="text-xl font-semibold mb-2 text-cyan-400">
+              Blog Management
+            </h2>
             <p className="text-slate-400 mb-6 text-sm">
               Create new articles, edit existing posts, and manage content.
             </p>
@@ -264,7 +349,9 @@ const AdminDashboard = () => {
           </div>
 
           <div className="bg-slate-800 p-6 rounded-lg border border-slate-700 hover:border-cyan-500/50 transition-colors">
-            <h2 className="text-xl font-semibold mb-2 text-cyan-400">Projects Management</h2>
+            <h2 className="text-xl font-semibold mb-2 text-cyan-400">
+              Projects Management
+            </h2>
             <p className="text-slate-400 mb-6 text-sm">
               Add new portfolio projects, update details, and organize work.
             </p>
@@ -276,7 +363,9 @@ const AdminDashboard = () => {
 
         {/* --- Quick Stats --- */}
         <div className="mt-8 bg-slate-800 p-6 rounded-lg border border-slate-700">
-          <h2 className="text-lg font-semibold mb-4 text-slate-300 border-b border-slate-700 pb-2">Quick Overview</h2>
+          <h2 className="text-lg font-semibold mb-4 text-slate-300 border-b border-slate-700 pb-2">
+            Quick Overview
+          </h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="text-center p-4 bg-slate-900/50 rounded-lg">
               <div className="text-3xl font-bold text-cyan-400 mb-1">0</div>
@@ -299,13 +388,12 @@ const AdminDashboard = () => {
 
         {/* --- Modals Rendered Here --- */}
         {showBlogModal && <Model toggleModal={toggleBlogModal} />}
-        
-        {/* Render the Internal UserProfileModal component */}
-        <UserProfileModal 
-          isOpen={showProfileModal} 
-          onClose={() => setShowProfileModal(false)} 
-        />
 
+        {/* Render the Internal UserProfileModal component */}
+        <UserProfileModal
+          isOpen={showProfileModal}
+          onClose={() => setShowProfileModal(false)}
+        />
       </div>
     </div>
   );

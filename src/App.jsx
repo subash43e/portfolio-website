@@ -12,6 +12,7 @@ import { AuthProvider } from "./contexts/AuthContext";
 import Header from "./components/Header";
 import CreateBlog from "./components/CreateBlog";
 import EditProfile from "./components/EditProfile";
+import BlogDetail from "./components/BlogDetail";
 import { StoreProvider } from "./contexts/StoreContext";
 
 // Lazy load components for code splitting
@@ -47,6 +48,7 @@ function AppContent() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/blog" element={<Blog />} />
+          <Route path="/blog/:id" element={<BlogDetail />} />
           <Route path="/owner/login" element={<AdminLogin />} />
           <Route
             path="/owner"
