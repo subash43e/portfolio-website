@@ -11,6 +11,7 @@ import { useEffect } from "react";
 import { AuthProvider } from "./contexts/AuthContext";
 import Header from "./components/Header";
 import CreateBlog from "./components/CreateBlog";
+import { StoreProvider } from "./contexts/StoreContext";
 
 // Lazy load components for code splitting
 const Home = lazy(() => import("./components/Home"));
@@ -89,9 +90,11 @@ function AppContent() {
 export default function App() {
   return (
     <AuthProvider>
-      <Router>
-        <AppContent />
-      </Router>
+      <StoreProvider>
+        <Router>
+          <AppContent />
+        </Router>
+      </StoreProvider>
     </AuthProvider>
   );
 }

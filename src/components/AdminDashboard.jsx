@@ -42,7 +42,6 @@ const AdminDashboard = () => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {/* Blog Management Card */}
           <div className="bg-slate-800 p-6 rounded-lg">
             <h2 className="text-xl font-semibold mb-4">Blog Management</h2>
             <p className="text-slate-300 mb-4">
@@ -56,7 +55,6 @@ const AdminDashboard = () => {
             </button>
           </div>
 
-          {/* Projects Management Card */}
           <div className="bg-slate-800 p-6 rounded-lg">
             <h2 className="text-xl font-semibold mb-4">Projects Management</h2>
             <p className="text-slate-300 mb-4">
@@ -67,7 +65,6 @@ const AdminDashboard = () => {
             </button>
           </div>
 
-          {/* File Storage Card */}
           <div className="bg-slate-800 p-6 rounded-lg">
             <h2 className="text-xl font-semibold mb-4">File Storage</h2>
             <p className="text-slate-300 mb-4">
@@ -78,7 +75,6 @@ const AdminDashboard = () => {
             </button>
           </div>
         </div>
-        {/* Quick Stats */}
         <div className="mt-8 bg-slate-800 p-6 rounded-lg">
           <h2 className="text-xl font-semibold mb-4">Quick Stats</h2>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
