@@ -1,8 +1,10 @@
 import MDEditor from "@uiw/react-md-editor";
 import { useStore } from "../hooks/useStore";
+import { useNavigate } from "react-router-dom";
 
 function BlogCreator() {
   const { mdContent, setMdContent, saveBlog } = useStore();
+  const navigate = useNavigate();
 
   const handlePublish = (e) => {
     e.preventDefault();
@@ -29,12 +31,20 @@ function BlogCreator() {
       </div>
 
       <div className="w-full max-w-4xl mt-8">
-        <button
-          onClick={handlePublish}
-          className="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 px-4 rounded-lg transition duration-200"
-        >
-          Publish Blog Post
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={() => navigate(-1)}
+            className="bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 px-4 rounded-lg transition duration-200"
+          >
+            Go Back
+          </button>
+          <button
+            onClick={handlePublish}
+            className="flex-1 bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 px-4 rounded-lg transition duration-200"
+          >
+            Publish Blog Post
+          </button>
+        </div>
       </div>
     </div>
   );

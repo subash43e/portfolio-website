@@ -1,10 +1,182 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "../hooks/useAuth";
 import { useNavigate } from "react-router-dom";
-import Model from "./Model";
+import { auth, db } from "../firebase"; // Needed for profile updates
+import { updateProfile } from "firebase/auth"; // Needed for profile updates
+import { doc, getDoc, setDoc } from "firebase/firestore"; // Needed for profile updates
+import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage"; // Needed for profile updates
+import Model from "./Model"; // Your existing Blog Modal
 
+// ==========================================
+// INTERNAL COMPONENT: User Profile Modal
+// ==========================================
+const UserProfileModal = ({ isOpen, onClose }) => {
+  const { currentUser } = useAuth();
+  
+  // State
+  const [displayName, setDisplayName] = useState("");
+  const [photoURL, setPhotoURL] = useState("");
+  const [photoFile, setPhotoFile] = useState(null);
+  const [previewPhoto, setPreviewPhoto] = useState("");
+  const [bio, setBio] = useState("");
+  
+  // UI State
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [isEditing, setIsEditing] = useState(false);
+
+  // Initialize data when currentUser loads or modal opens
+  useEffect(() => {
+    if (currentUser && isOpen) {
+      setDisplayName(currentUser.displayName || "");
+      setPhotoURL(currentUser.photoURL || "");
+      fetchUserProfile();
+    }
+  }, [currentUser, isOpen]);
+
+  const fetchUserProfile = async () => {
+    if (!currentUser) return;
+    try {
+      const userDoc = await getDoc(doc(db, "users", currentUser.uid));
+      if (userDoc.exists()) {
+        const data = userDoc.data();
+        setBio(data.bio || "");
+        if (data.photoURL) setPhotoURL(data.photoURL);
+      }
+    } catch (err) {
+      console.error("Error fetching user profile:", err);
+    }
+  };
+
+  const handlePhotoChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setPhotoFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPreviewPhoto(reader.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSaveProfile = async (e) => {
+    e.preventDefault();
+    if (!currentUser) return;
+
+    setLoading(true);
+    setError("");
+    setSuccess("");
+
+    try {
+      let finalPhotoURL = photoURL;
+
+      // 1. Upload new photo to Firebase Storage if selected
+      if (photoFile) {
+        const storage = getStorage();
+        const photoRef = ref(storage, `user-profiles/${currentUser.uid}/${photoFile.name}`);
+        await uploadBytes(photoRef, photoFile);
+        finalPhotoURL = await getDownloadURL(photoRef);
+      }
+
+      // 2. Update Firebase Auth Profile
+      await updateProfile(auth.currentUser, {
+        displayName: displayName,
+        photoURL: finalPhotoURL,
+      });
+
+      // 3. Update Firestore User Document
+      await setDoc(
+        doc(db, "users", currentUser.uid),
+        {
+          displayName: displayName,
+          photoURL: finalPhotoURL,
+          bio: bio,
+          email: currentUser.email,
+          updatedAt: new Date(),
+        },
+        { merge: true }
+      );
+
+      setPhotoURL(finalPhotoURL);
+      setSuccess("Profile updated successfully!");
+      setIsEditing(false);
+      setPhotoFile(null);
+      setPreviewPhoto("");
+      setTimeout(() => setSuccess(""), 3000);
+
+    } catch (err) {
+      setError("Failed to update profile: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-slate-800 rounded-lg max-w-2xl w-full mx-4 p-8 shadow-2xl border border-slate-700" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-bold text-slate-100">User Profile</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors text-2xl">✕</button>
+        </div>
+
+        {error && <div className="bg-red-500/10 border border-red-500 text-red-500 p-4 rounded mb-4">{error}</div>}
+        {success && <div className="bg-green-500/10 border border-green-500 text-green-500 p-4 rounded mb-4">{success}</div>}
+
+        {!isEditing ? (
+          <div className="space-y-6">
+            <div className="flex items-center gap-6">
+              <img src={photoURL || "https://via.placeholder.com/150"} alt="User Avatar" className="w-32 h-32 rounded-full object-cover border-4 border-cyan-600 shadow-lg" />
+              <div className="flex-1">
+                <h3 className="text-2xl font-bold text-slate-100">{displayName || "User"}</h3>
+                <p className="text-slate-400 mb-2">{currentUser?.email}</p>
+                <p className="text-slate-300 mb-4 bg-slate-900/50 p-3 rounded-md min-h-[60px]">{bio || "No bio added yet"}</p>
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <button onClick={() => setIsEditing(true)} className="bg-cyan-600 hover:bg-cyan-700 text-white font-medium py-2 px-6 rounded-md shadow-lg shadow-cyan-600/20">Edit Profile</button>
+            </div>
+          </div>
+        ) : (
+          <form onSubmit={handleSaveProfile} className="space-y-6">
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-3">Profile Photo</label>
+              <div className="flex items-center gap-6">
+                <img src={previewPhoto || photoURL || "https://via.placeholder.com/150"} alt="User Avatar" className="w-32 h-32 rounded-full object-cover border-4 border-cyan-600" />
+                <div>
+                  <label htmlFor="photo" className="bg-slate-700 hover:bg-slate-600 text-slate-100 px-4 py-2 rounded-md cursor-pointer border border-slate-600">Choose New Photo</label>
+                  <input id="photo" type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" />
+                </div>
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">Username</label>
+              <input type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)} className="w-full px-4 py-2 bg-slate-900/50 border border-slate-600 rounded-md text-slate-100 focus:ring-2 focus:ring-cyan-500" required />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">Bio</label>
+              <textarea value={bio} onChange={(e) => setBio(e.target.value)} className="w-full px-4 py-2 bg-slate-900/50 border border-slate-600 rounded-md text-slate-100 focus:ring-2 focus:ring-cyan-500 resize-none" rows="4"></textarea>
+            </div>
+            <div className="flex gap-4 justify-end pt-4 border-t border-slate-700">
+              <button type="button" onClick={() => { setIsEditing(false); setPreviewPhoto(""); setPhotoFile(null); fetchUserProfile(); }} className="bg-transparent border border-slate-600 text-slate-300 hover:bg-slate-700 py-2 px-6 rounded-md">Cancel</button>
+              <button type="submit" disabled={loading} className="bg-cyan-600 hover:bg-cyan-700 text-white py-2 px-6 rounded-md disabled:opacity-50">{loading ? "Saving..." : "Save Changes"}</button>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ==========================================
+// MAIN COMPONENT: Admin Dashboard
+// ==========================================
 const AdminDashboard = () => {
-  const [useModel, setToggleModel] = useState(false);
+  const [showBlogModal, setShowBlogModal] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
 
   const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
@@ -18,85 +190,122 @@ const AdminDashboard = () => {
     }
   }
 
-  const toggleModel = (e) => {
-    e.preventDefault();
-    setToggleModel(!useModel);
+  const toggleBlogModal = (e) => {
+    if (e) e.preventDefault(); 
+    setShowBlogModal(!showBlogModal);
   };
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100">
       <div className="max-w-6xl mx-auto px-6 py-8">
+        
+        {/* --- Header Section --- */}
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-bold">Admin Dashboard</h1>
           <div className="flex items-center gap-4">
-            <span className="text-slate-300">
-              Welcome, {currentUser?.email}
-            </span>
             <button
               onClick={handleLogout}
-              className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md transition duration-200"
+              className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md transition duration-200 text-sm font-medium shadow-lg shadow-red-600/20"
             >
               Logout
             </button>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <div className="bg-slate-800 p-6 rounded-lg">
-            <h2 className="text-xl font-semibold mb-4">Blog Management</h2>
-            <p className="text-slate-300 mb-4">
-              Create, edit, and manage blog posts
+        {/* --- User Profile Card --- */}
+        <div className="mb-8 bg-gradient-to-r from-cyan-900/80 to-slate-800 p-6 rounded-lg border border-cyan-700/30 shadow-xl backdrop-blur-sm">
+          <div className="flex flex-col md:flex-row items-center gap-6 text-center md:text-left">
+            {currentUser?.photoURL ? (
+              <img
+                src={currentUser.photoURL}
+                alt="Profile"
+                className="h-24 w-24 rounded-full object-cover border-4 border-cyan-500 shadow-lg"
+              />
+            ) : (
+              <div className="h-24 w-24 rounded-full bg-slate-700 border-4 border-cyan-500 flex items-center justify-center shadow-lg">
+                <span className="text-3xl font-bold text-cyan-500">
+                  {currentUser?.email?.charAt(0).toUpperCase()}
+                </span>
+              </div>
+            )}
+
+            <div className="flex-1">
+              <h2 className="text-2xl font-bold text-white mb-1">
+                {currentUser?.displayName || "Admin User"}
+              </h2>
+              <p className="text-cyan-200 mb-2">{currentUser?.email}</p>
+              <p className="text-slate-400 text-xs uppercase tracking-wider font-semibold">
+                System Administrator
+              </p>
+            </div>
+
+            <button
+              onClick={() => setShowProfileModal(true)}
+              className="bg-cyan-600 hover:bg-cyan-700 text-white px-6 py-2 rounded-lg transition duration-200 font-semibold shadow-lg shadow-cyan-600/20"
+            >
+              Edit Profile
+            </button>
+          </div>
+        </div>
+
+        {/* --- Management Grid --- */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="bg-slate-800 p-6 rounded-lg border border-slate-700 hover:border-cyan-500/50 transition-colors">
+            <h2 className="text-xl font-semibold mb-2 text-cyan-400">Blog Management</h2>
+            <p className="text-slate-400 mb-6 text-sm">
+              Create new articles, edit existing posts, and manage content.
             </p>
             <button
-              onClick={toggleModel}
-              className="bg-cyan-600 hover:bg-cyan-700 text-slate-900 px-4 py-2 rounded-md transition duration-200"
+              onClick={toggleBlogModal}
+              className="w-full bg-slate-700 hover:bg-cyan-600 hover:text-white text-cyan-400 px-4 py-2 rounded-md transition duration-200"
             >
               Manage Blog
             </button>
           </div>
 
-          <div className="bg-slate-800 p-6 rounded-lg">
-            <h2 className="text-xl font-semibold mb-4">Projects Management</h2>
-            <p className="text-slate-300 mb-4">
-              Add, update, and organize projects
+          <div className="bg-slate-800 p-6 rounded-lg border border-slate-700 hover:border-cyan-500/50 transition-colors">
+            <h2 className="text-xl font-semibold mb-2 text-cyan-400">Projects Management</h2>
+            <p className="text-slate-400 mb-6 text-sm">
+              Add new portfolio projects, update details, and organize work.
             </p>
-            <button className="bg-cyan-600 hover:bg-cyan-700 text-slate-900 px-4 py-2 rounded-md transition duration-200">
+            <button className="w-full bg-slate-700 hover:bg-cyan-600 hover:text-white text-cyan-400 px-4 py-2 rounded-md transition duration-200">
               Manage Projects
             </button>
           </div>
+        </div>
 
-          <div className="bg-slate-800 p-6 rounded-lg">
-            <h2 className="text-xl font-semibold mb-4">File Storage</h2>
-            <p className="text-slate-300 mb-4">
-              Upload and manage files and images
-            </p>
-            <button className="bg-cyan-600 hover:bg-cyan-700 text-slate-900 px-4 py-2 rounded-md transition duration-200">
-              Manage Files
-            </button>
-          </div>
-        </div>
-        <div className="mt-8 bg-slate-800 p-6 rounded-lg">
-          <h2 className="text-xl font-semibold mb-4">Quick Stats</h2>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="text-center">
-              <div className="text-2xl font-bold text-cyan-400">0</div>
-              <div className="text-slate-300">Blog Posts</div>
+        {/* --- Quick Stats --- */}
+        <div className="mt-8 bg-slate-800 p-6 rounded-lg border border-slate-700">
+          <h2 className="text-lg font-semibold mb-4 text-slate-300 border-b border-slate-700 pb-2">Quick Overview</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="text-center p-4 bg-slate-900/50 rounded-lg">
+              <div className="text-3xl font-bold text-cyan-400 mb-1">0</div>
+              <div className="text-slate-400 text-sm">Blog Posts</div>
             </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-cyan-400">0</div>
-              <div className="text-slate-300">Projects</div>
+            <div className="text-center p-4 bg-slate-900/50 rounded-lg">
+              <div className="text-3xl font-bold text-cyan-400 mb-1">0</div>
+              <div className="text-slate-400 text-sm">Projects</div>
             </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-cyan-400">0</div>
-              <div className="text-slate-300">Files</div>
+            <div className="text-center p-4 bg-slate-900/50 rounded-lg">
+              <div className="text-3xl font-bold text-cyan-400 mb-1">0</div>
+              <div className="text-slate-400 text-sm">Files</div>
             </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-cyan-400">0</div>
-              <div className="text-slate-300">Visitors</div>
+            <div className="text-center p-4 bg-slate-900/50 rounded-lg">
+              <div className="text-3xl font-bold text-cyan-400 mb-1">0</div>
+              <div className="text-slate-400 text-sm">Visitors</div>
             </div>
           </div>
         </div>
-        {useModel && <Model />}
+
+        {/* --- Modals Rendered Here --- */}
+        {showBlogModal && <Model toggleModal={toggleBlogModal} />}
+        
+        {/* Render the Internal UserProfileModal component */}
+        <UserProfileModal 
+          isOpen={showProfileModal} 
+          onClose={() => setShowProfileModal(false)} 
+        />
+
       </div>
     </div>
   );

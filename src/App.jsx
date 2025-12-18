@@ -11,6 +11,7 @@ import { useEffect } from "react";
 import { AuthProvider } from "./contexts/AuthContext";
 import Header from "./components/Header";
 import CreateBlog from "./components/CreateBlog";
+import EditProfile from "./components/EditProfile";
 import { StoreProvider } from "./contexts/StoreContext";
 
 // Lazy load components for code splitting
@@ -52,6 +53,14 @@ function AppContent() {
             element={
               <PrivateRoute>
                 <AdminDashboard />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/owner/profile"
+            element={
+              <PrivateRoute>
+                <EditProfile />
               </PrivateRoute>
             }
           />
