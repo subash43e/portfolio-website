@@ -48,7 +48,13 @@ const Modal = ({ toggleModal }) => {
             </svg>
           </button>
 
-          <button className="group flex w-full items-center justify-between rounded-xl bg-red-50 px-4 py-3 text-slate-700 transition-all hover:bg-red-100 hover:shadow-md">
+          <button
+            onClick={() => {
+              navigate("/owner/blogs/management");
+              toggleModal();
+            }}
+            className="group flex w-full items-center justify-between rounded-xl bg-red-50 px-4 py-3 text-slate-700 transition-all hover:bg-red-100 hover:shadow-md"
+          >
             <span className="font-semibold">Manage blogs</span>
             <svg
               className="h-5 w-5 opacity-70 group-hover:opacity-100 transition-opacity"

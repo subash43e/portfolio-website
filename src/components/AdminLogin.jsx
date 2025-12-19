@@ -3,6 +3,7 @@ import { useAuth } from "../hooks/useAuth";
 import { useNavigate } from "react-router-dom";
 
 const AdminLogin = () => {
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -17,6 +18,7 @@ const AdminLogin = () => {
       setLoading(true);
       await login(email, password);
       navigate("/owner");
+
     } catch (error) {
       setError("Failed to log in. Please check your credentials.");
       console.error("Login error:", error);

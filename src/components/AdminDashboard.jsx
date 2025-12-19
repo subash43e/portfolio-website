@@ -6,6 +6,7 @@ import { updateProfile } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import Model from "./Model";
+import { useStore } from "../hooks/useStore";
 
 const UserProfileModal = ({ isOpen, onClose }) => {
   const { currentUser } = useAuth();
@@ -148,7 +149,7 @@ const UserProfileModal = ({ isOpen, onClose }) => {
                   className="w-32 h-32 rounded-full object-cover border-4 border-cyan-600 shadow-lg"
                 />
               ) : (
-                <div className="w-32 h-32 rounded-full bg-gradient-to-br from-cyan-500 to-cyan-700 border-4 border-cyan-600 shadow-lg flex items-center justify-center">
+                <div className="w-32 h-32 rounded-full bg-linear-to-br from-cyan-500 to-cyan-700 border-4 border-cyan-600 shadow-lg flex items-center justify-center">
                   <span className="text-4xl font-bold text-white">
                     {(displayName || "U").charAt(0).toUpperCase()}
                   </span>
@@ -180,14 +181,15 @@ const UserProfileModal = ({ isOpen, onClose }) => {
                 Profile Photo
               </label>
               <div className="flex items-center gap-6">
-                {(previewPhoto && previewPhoto.trim()) || (photoURL && photoURL.trim()) ? (
+                {(previewPhoto && previewPhoto.trim()) ||
+                (photoURL && photoURL.trim()) ? (
                   <img
                     src={previewPhoto || photoURL}
                     alt="User Avatar"
                     className="w-32 h-32 rounded-full object-cover border-4 border-cyan-600"
                   />
                 ) : (
-                  <div className="w-32 h-32 rounded-full bg-gradient-to-br from-cyan-500 to-cyan-700 border-4 border-cyan-600 flex items-center justify-center">
+                  <div className="w-32 h-32 rounded-full bg-linear-to-br from-cyan-500 to-cyan-700 border-4 border-cyan-600 flex items-center justify-center">
                     <span className="text-4xl font-bold text-white">
                       {(displayName || "U").charAt(0).toUpperCase()}
                     </span>
@@ -262,6 +264,8 @@ const UserProfileModal = ({ isOpen, onClose }) => {
 };
 
 const AdminDashboard = () => {
+  const { blogs } = useStore();
+
   const [showBlogModal, setShowBlogModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
 
@@ -366,9 +370,11 @@ const AdminDashboard = () => {
           <h2 className="text-lg font-semibold mb-4 text-slate-300 border-b border-slate-700 pb-2">
             Quick Overview
           </h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="text-center p-4 bg-slate-900/50 rounded-lg">
-              <div className="text-3xl font-bold text-cyan-400 mb-1">0</div>
+              <div className="text-3xl font-bold text-cyan-400 mb-1">
+                {blogs.length}
+              </div>
               <div className="text-slate-400 text-sm">Blog Posts</div>
             </div>
             <div className="text-center p-4 bg-slate-900/50 rounded-lg">
@@ -377,19 +383,13 @@ const AdminDashboard = () => {
             </div>
             <div className="text-center p-4 bg-slate-900/50 rounded-lg">
               <div className="text-3xl font-bold text-cyan-400 mb-1">0</div>
-              <div className="text-slate-400 text-sm">Files</div>
-            </div>
-            <div className="text-center p-4 bg-slate-900/50 rounded-lg">
-              <div className="text-3xl font-bold text-cyan-400 mb-1">0</div>
               <div className="text-slate-400 text-sm">Visitors</div>
             </div>
           </div>
         </div>
 
-        {/* --- Modals Rendered Here --- */}
         {showBlogModal && <Model toggleModal={toggleBlogModal} />}
 
-        {/* Render the Internal UserProfileModal component */}
         <UserProfileModal
           isOpen={showProfileModal}
           onClose={() => setShowProfileModal(false)}
