@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { auth, db } from "../firebase";
 import { updateProfile } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
-import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
+
 import Model from "./Model";
 import { useStore } from "../hooks/useStore";
 
@@ -13,8 +13,7 @@ const UserProfileModal = ({ isOpen, onClose }) => {
 
   const [displayName, setDisplayName] = useState("");
   const [photoURL, setPhotoURL] = useState("");
-  const [photoFile, setPhotoFile] = useState(null);
-  const [previewPhoto, setPreviewPhoto] = useState("");
+
   const [bio, setBio] = useState("");
 
   const [loading, setLoading] = useState(false);
@@ -44,18 +43,6 @@ const UserProfileModal = ({ isOpen, onClose }) => {
     }
   };
 
-  const handlePhotoChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setPhotoFile(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setPreviewPhoto(reader.result);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
   const handleSaveProfile = async (e) => {
     e.preventDefault();
     if (!currentUser) return;
@@ -66,16 +53,6 @@ const UserProfileModal = ({ isOpen, onClose }) => {
 
     try {
       let finalPhotoURL = photoURL;
-
-      if (photoFile) {
-        const storage = getStorage();
-        const photoRef = ref(
-          storage,
-          `user-profiles/${currentUser.uid}/${photoFile.name}`
-        );
-        await uploadBytes(photoRef, photoFile);
-        finalPhotoURL = await getDownloadURL(photoRef);
-      }
 
       await updateProfile(auth.currentUser, {
         displayName: displayName,
@@ -97,8 +74,6 @@ const UserProfileModal = ({ isOpen, onClose }) => {
       setPhotoURL(finalPhotoURL);
       setSuccess("Profile updated successfully!");
       setIsEditing(false);
-      setPhotoFile(null);
-      setPreviewPhoto("");
       setTimeout(() => setSuccess(""), 3000);
     } catch (err) {
       setError("Failed to update profile: " + err.message);
@@ -177,14 +152,13 @@ const UserProfileModal = ({ isOpen, onClose }) => {
         ) : (
           <form onSubmit={handleSaveProfile} className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-3">
-                Profile Photo
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                Profile Photo URL
               </label>
               <div className="flex items-center gap-6">
-                {(previewPhoto && previewPhoto.trim()) ||
-                (photoURL && photoURL.trim()) ? (
+                {photoURL && photoURL.trim() ? (
                   <img
-                    src={previewPhoto || photoURL}
+                    src={photoURL}
                     alt="User Avatar"
                     className="w-32 h-32 rounded-full object-cover border-4 border-cyan-600"
                   />
@@ -195,21 +169,13 @@ const UserProfileModal = ({ isOpen, onClose }) => {
                     </span>
                   </div>
                 )}
-                <div>
-                  <label
-                    htmlFor="photo"
-                    className="bg-slate-700 hover:bg-slate-600 text-slate-100 px-4 py-2 rounded-md cursor-pointer border border-slate-600"
-                  >
-                    Choose New Photo
-                  </label>
-                  <input
-                    id="photo"
-                    type="file"
-                    accept="image/*"
-                    onChange={handlePhotoChange}
-                    className="hidden"
-                  />
-                </div>
+                <input
+                  type="url"
+                  value={photoURL}
+                  onChange={(e) => setPhotoURL(e.target.value)}
+                  className="flex-1 px-4 py-2 bg-slate-900/50 border border-slate-600 rounded-md text-slate-100 focus:ring-2 focus:ring-cyan-500"
+                  placeholder="Enter image URL"
+                />
               </div>
             </div>
             <div>
@@ -240,8 +206,6 @@ const UserProfileModal = ({ isOpen, onClose }) => {
                 type="button"
                 onClick={() => {
                   setIsEditing(false);
-                  setPreviewPhoto("");
-                  setPhotoFile(null);
                   fetchUserProfile();
                 }}
                 className="bg-transparent border border-slate-600 text-slate-300 hover:bg-slate-700 py-2 px-6 rounded-md"
@@ -370,16 +334,12 @@ const AdminDashboard = () => {
           <h2 className="text-lg font-semibold mb-4 text-slate-300 border-b border-slate-700 pb-2">
             Quick Overview
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="text-center p-4 bg-slate-900/50 rounded-lg">
               <div className="text-3xl font-bold text-cyan-400 mb-1">
                 {blogs.length}
               </div>
               <div className="text-slate-400 text-sm">Blog Posts</div>
-            </div>
-            <div className="text-center p-4 bg-slate-900/50 rounded-lg">
-              <div className="text-3xl font-bold text-cyan-400 mb-1">0</div>
-              <div className="text-slate-400 text-sm">Projects</div>
             </div>
             <div className="text-center p-4 bg-slate-900/50 rounded-lg">
               <div className="text-3xl font-bold text-cyan-400 mb-1">0</div>
