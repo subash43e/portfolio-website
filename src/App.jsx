@@ -17,6 +17,7 @@ import BlogDetail from "./components/BlogDetail";
 import BlogManagement from "./components/BlogManagement";
 import BlogEdit from "./components/BlogEdit";
 import { StoreProvider } from "./contexts/StoreContext";
+import CvatCalculation from "./components/Cvat";
 
 // Lazy load components for code splitting
 const Home = lazy(() => import("./components/Home"));
@@ -30,7 +31,6 @@ function AppContent() {
 
   useEffect(() => {
     if (location.hash) {
-
       console.log(location.hash);
       const element = document.getElementById(location.hash.substring(1));
       if (element) {
@@ -53,6 +53,7 @@ function AppContent() {
           <Route path="/" element={<Home />} />
           <Route path="/blog" element={<Blog />} />
           <Route path="/blog/:id" element={<BlogDetail />} />
+          <Route path="/cvat" element={<CvatCalculation />} />
           <Route
             path="/owner"
             element={

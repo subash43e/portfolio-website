@@ -22,8 +22,6 @@ function BlogCreator() {
     try {
       await saveBlog(mdContent);
       setPublishStatus("success");
-      
-      // Show success message for 2 seconds then redirect
       setTimeout(() => {
         navigate("/blog");
       }, 2000);
