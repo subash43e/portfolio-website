@@ -19,11 +19,12 @@ import {
   ListOrdered,
   BarChart2,
   FileText,
-  Table
+  Table,
+  ChevronDown,
+  ChevronRight
 } from "lucide-react";
-import jsPDF from "jspdf";
-import "jspdf-autotable";
-import * as XLSX from "xlsx";
+import { handleExportCSV, handleExportExcel, handleExportPDF } from "./cvat/exportUtils";
+import DashboardStats from "./cvat/DashboardStats";
 
 import useLocalStorage from "../../hooks/useLocalStorage";
 
@@ -46,6 +47,12 @@ const CvatCalculation = () => {
 
   // NEW: State to control the bottom-left Dashboard tabs
   const [activeTab, setActiveTab] = useState("overview"); // "overview" or "slots"
+
+  // NEW: State for collapsible folders in History
+  const [collapsedFiles, setCollapsedFiles] = useState({});
+  const toggleFile = (fileName) => {
+    setCollapsedFiles(prev => ({ ...prev, [fileName]: !prev[fileName] }));
+  };
 
   const frameInputRef = useRef(null);
   const facesInputRef = useRef(null);
@@ -190,75 +197,7 @@ const CvatCalculation = () => {
     return acc;
   }, {});
 
-  const handleExportCSV = () => {
-    if (finalDisplayEntries.length === 0) return alert("No data to export!");
-    const headers = ["Date", "Start Time", "End Time", "File Name", "Frame Number", "Faces Completed", "Duration (Minutes)"];
-    const csvRows = finalDisplayEntries.map(entry => [
-      `"${entry.date}"`, `"${entry.startTimeString || "N/A"}"`, `"${entry.timestamp}"`, `"${entry.fileName}"`, `"${entry.frameNumber}"`, `"${entry.facesCompleted}"`, `"${entry.durationMinutes}"`
-    ].join(","));
-    
-    const csvContent = [headers.join(","), ...csvRows].join("\n");
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    const dateStrForFile = dateFilter === "All Time" ? "all_time" : dateFilter.replace(/\//g, '-');
-    const safeFileName = selectedExportFile === "All" ? "all_files" : selectedExportFile.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-    link.setAttribute("download", `cvat_log_${safeFileName}_${dateStrForFile}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const handleExportExcel = () => {
-    if (finalDisplayEntries.length === 0) return alert("No data to export!");
-    const wsData = finalDisplayEntries.map(entry => ({
-      Date: entry.date,
-      "Start Time": entry.startTimeString || "N/A",
-      "End Time": entry.timestamp,
-      "File Name": entry.fileName,
-      "Frame Number": entry.frameNumber,
-      "Faces Completed": entry.facesCompleted,
-      "Duration (Min)": entry.durationMinutes
-    }));
-    const worksheet = XLSX.utils.json_to_sheet(wsData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "CVAT Data");
-    const dateStrForFile = dateFilter === "All Time" ? "all_time" : dateFilter.replace(/\//g, '-');
-    const safeFileName = selectedExportFile === "All" ? "all_files" : selectedExportFile.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-    XLSX.writeFile(workbook, `cvat_log_${safeFileName}_${dateStrForFile}.xlsx`);
-  };
-
-  const handleExportPDF = () => {
-    if (finalDisplayEntries.length === 0) return alert("No data to export!");
-    const doc = new jsPDF();
-    doc.text("CVAT Report", 14, 15);
-    
-    const tableColumn = ["Date", "Start Time", "End Time", "File Name", "Frame", "Faces", "Duration (Min)"];
-    const tableRows = [];
-
-    finalDisplayEntries.forEach(entry => {
-      const rowData = [
-        entry.date,
-        entry.startTimeString || "N/A",
-        entry.timestamp,
-        entry.fileName,
-        entry.frameNumber,
-        entry.facesCompleted,
-        entry.durationMinutes
-      ];
-      tableRows.push(rowData);
-    });
-
-    doc.autoTable({
-      head: [tableColumn],
-      body: tableRows,
-      startY: 20,
-    });
-    
-    const dateStrForFile = dateFilter === "All Time" ? "all_time" : dateFilter.replace(/\//g, '-');
-    const safeFileName = selectedExportFile === "All" ? "all_files" : selectedExportFile.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-    doc.save(`cvat_report_${safeFileName}_${dateStrForFile}.pdf`);
-  };
+  // Export logic moved to exportUtils.js
 
   useEffect(() => {
     if (isWorking && !startTime && frameInputRef.current) {
@@ -314,41 +253,6 @@ const CvatCalculation = () => {
 
   const todaysEntries = entries.filter((entry) => entry.date === todayString);
 
-  // --- SLOT CALCULATION LOGIC ---
-  const slotNames = ["11:00 AM", "1:00 PM", "2:00 PM", "5:00 PM", "6:00 PM", "Overtime"];
-  const slotData = slotNames.reduce((acc, slot) => ({ ...acc, [slot]: [] }), {});
-  const entriesForSlots = dateFilter === "All Time" ? finalDisplayEntries.filter(entry => entry.date === todayString) : finalDisplayEntries;
-  
-  const totalFramesCompleted = entriesForSlots.length;
-  const totalFacesCompleted = entriesForSlots.reduce((sum, entry) => sum + entry.facesCompleted, 0);
-  const totalTimeSpent = entriesForSlots.reduce((sum, entry) => sum + entry.durationMinutes, 0);
-
-  entriesForSlots.forEach(entry => {
-    let hours = 0, minutes = 0;
-    try {
-      const entryTime = new Date(`${entry.date} ${entry.timestamp}`);
-      hours = entryTime.getHours();
-      minutes = entryTime.getMinutes();
-      if (isNaN(hours)) {
-        const [time, modifier] = entry.timestamp.split(' ');
-        let [h, m] = time.split(':');
-        hours = parseInt(h, 10);
-        minutes = parseInt(m, 10);
-        if (modifier === 'PM' && hours < 12) hours += 12;
-        if (modifier === 'AM' && hours === 12) hours = 0;
-      }
-    } catch (e) {
-      console.error("Time parsing error", e);
-    }
-
-    const timeFloat = hours + (minutes / 60);
-    if (timeFloat <= 11) slotData["11:00 AM"].push(entry);
-    else if (timeFloat <= 13) slotData["1:00 PM"].push(entry);
-    else if (timeFloat <= 14) slotData["2:00 PM"].push(entry);
-    else if (timeFloat <= 17) slotData["5:00 PM"].push(entry);
-    else if (timeFloat <= 18) slotData["6:00 PM"].push(entry);
-    else slotData["Overtime"].push(entry);
-  });
 
   return (
     <div className="min-h-screen bg-slate-50 p-8 font-sans text-slate-800">
@@ -453,108 +357,13 @@ const CvatCalculation = () => {
           </div>
 
           {/* NEW: TABBED DASHBOARD CARD */}
-          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
-            
-            {/* Tab Header */}
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-lg font-semibold text-slate-800">
-                {dateFilter === "All Time" ? "Today's Performance" : `${dateFilter} Performance`}
-              </h2>
-              
-              <div className="flex bg-slate-100 p-1 rounded-lg">
-                <button 
-                  onClick={() => setActiveTab('overview')}
-                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${
-                    activeTab === 'overview' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'
-                  }`}
-                >
-                  <BarChart2 size={14} /> Overview
-                </button>
-                <button 
-                  onClick={() => setActiveTab('slots')}
-                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${
-                    activeTab === 'slots' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'
-                  }`}
-                >
-                  <ListOrdered size={14} /> Slots
-                </button>
-              </div>
-            </div>
-
-            {/* Tab Content 1: Overview */}
-            {activeTab === 'overview' && (
-              <div className="grid grid-cols-3 gap-4 animate-in fade-in duration-200">
-                <div className="bg-blue-50 rounded-xl p-4 flex flex-col justify-between h-24">
-                  <div className="flex items-center gap-2 text-slate-500 text-sm">
-                    <Calendar size={16} className="text-blue-500" />
-                    <span>Frames</span>
-                  </div>
-                  <span className="text-2xl font-bold text-blue-600">{totalFramesCompleted}</span>
-                </div>
-                <div className="bg-purple-50 rounded-xl p-4 flex flex-col justify-between h-24">
-                  <div className="flex items-center gap-2 text-slate-500 text-sm">
-                    <Eye size={16} className="text-purple-500" />
-                    <span>Faces</span>
-                  </div>
-                  <span className="text-2xl font-bold text-purple-600">{totalFacesCompleted}</span>
-                </div>
-                <div className="bg-orange-50 rounded-xl p-4 flex flex-col justify-between h-24">
-                  <div className="flex items-center gap-2 text-slate-500 text-sm">
-                    <Clock size={16} className="text-orange-500" />
-                    <span>Time</span>
-                  </div>
-                  <span className="text-2xl font-bold text-orange-600">{totalTimeSpent}m</span>
-                </div>
-              </div>
-            )}
-
-            {/* Tab Content 2: Slot Report */}
-            {activeTab === 'slots' && (
-              <div className="overflow-hidden rounded-lg border border-slate-200 animate-in fade-in duration-200">
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-slate-50 border-b border-slate-200">
-                    <tr>
-                      <th className="px-4 py-3 font-medium text-slate-600">Time Slot</th>
-                      <th className="px-4 py-3 font-medium text-slate-600">Start - End</th>
-                      <th className="px-4 py-3 font-medium text-slate-600 text-right">Faces</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {slotNames.map(slot => {
-                      const slotEntries = slotData[slot];
-                      if (slotEntries.length === 0) {
-                        return (
-                          <tr key={slot} className="text-slate-400 bg-white">
-                            <td className="px-4 py-3">{slot}</td>
-                            <td className="px-4 py-3">-</td>
-                            <td className="px-4 py-3 text-right">0</td>
-                          </tr>
-                        );
-                      }
-                      const sorted = [...slotEntries].sort((a, b) => a.id - b.id);
-                      const startFrame = sorted[0].frameNumber;
-                      const endFrame = sorted[sorted.length - 1].frameNumber;
-                      const totalSlotFaces = slotEntries.reduce((sum, e) => sum + e.facesCompleted, 0);
-
-                      return (
-                        <tr key={slot} className="bg-white hover:bg-slate-50 transition-colors">
-                          <td className="px-4 py-3 font-medium text-slate-700 whitespace-nowrap">{slot}</td>
-                          <td className="px-4 py-3 text-slate-600">
-                            {startFrame} <span className="text-slate-400 mx-1">→</span> {endFrame} 
-                            <span className="ml-2 text-xs text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded">
-                              ({slotEntries.length})
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-right font-medium text-purple-600">{totalSlotFaces}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-            
-          </div>
+          {/* NEW: TABBED DASHBOARD CARD */}
+          <DashboardStats 
+            dateFilter={dateFilter} 
+            finalDisplayEntries={finalDisplayEntries} 
+            activeTab={activeTab} 
+            setActiveTab={setActiveTab} 
+          />
         </div>
 
         {/* RIGHT COLUMN */}
@@ -578,9 +387,9 @@ const CvatCalculation = () => {
             </div>
             <div className="flex flex-col gap-2 shrink-0 mt-1">
               <div className="flex gap-2">
-                <button onClick={handleExportCSV} className="flex-1 flex items-center justify-center gap-2 px-3 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-200 transition-colors" title="Export CSV"><Download size={14} /></button>
-                <button onClick={handleExportExcel} className="flex-1 flex items-center justify-center gap-2 px-3 py-1.5 bg-green-50 border border-green-200 rounded-lg text-xs font-medium text-green-700 hover:bg-green-100 transition-colors" title="Export Excel"><Table size={14} /></button>
-                <button onClick={handleExportPDF} className="flex-1 flex items-center justify-center gap-2 px-3 py-1.5 bg-red-50 border border-red-200 rounded-lg text-xs font-medium text-red-700 hover:bg-red-100 transition-colors" title="Export PDF"><FileText size={14} /></button>
+                <button onClick={() => handleExportCSV(finalDisplayEntries, dateFilter, selectedExportFile)} className="flex-1 flex items-center justify-center gap-2 px-3 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-200 transition-colors" title="Export CSV"><Download size={14} /></button>
+                <button onClick={() => handleExportExcel(finalDisplayEntries, dateFilter, selectedExportFile)} className="flex-1 flex items-center justify-center gap-2 px-3 py-1.5 bg-green-50 border border-green-200 rounded-lg text-xs font-medium text-green-700 hover:bg-green-100 transition-colors" title="Export Excel"><Table size={14} /></button>
+                <button onClick={() => handleExportPDF(finalDisplayEntries, dateFilter, selectedExportFile)} className="flex-1 flex items-center justify-center gap-2 px-3 py-1.5 bg-red-50 border border-red-200 rounded-lg text-xs font-medium text-red-700 hover:bg-red-100 transition-colors" title="Export PDF"><FileText size={14} /></button>
               </div>
               <input type="file" accept=".csv" ref={fileInputRef} onChange={handleImportCSV} className="hidden" />
               <button onClick={() => fileInputRef.current?.click()} className="flex items-center justify-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg text-xs font-medium text-blue-700 hover:bg-blue-100 transition-colors"><Upload size={14} /> Import</button>
@@ -597,9 +406,17 @@ const CvatCalculation = () => {
                 {Object.keys(groupedEntries).map((file) => (
                   <div key={file} className="space-y-3">
                     {selectedExportFile === "All" && (
-                      <h3 className="text-sm font-bold text-slate-700 border-b pb-1 flex items-center gap-2"><Folder size={14} />{file}<span className="text-xs font-normal text-slate-400 ml-auto">{groupedEntries[file].length} frames</span></h3>
+                      <h3 
+                        className="text-sm font-bold text-slate-700 border-b pb-1 flex items-center gap-2 cursor-pointer hover:text-blue-600 transition-colors select-none"
+                        onClick={() => toggleFile(file)}
+                      >
+                        {collapsedFiles[file] ? <ChevronRight size={14} className="text-slate-400" /> : <ChevronDown size={14} className="text-slate-400" />}
+                        <Folder size={14} className="text-slate-500" />
+                        {file}
+                        <span className="text-xs font-normal text-slate-400 ml-auto">{groupedEntries[file].length} frames</span>
+                      </h3>
                     )}
-                    {groupedEntries[file].map((entry) => (
+                    {(!collapsedFiles[file] || selectedExportFile !== "All") && groupedEntries[file].map((entry) => (
                       <div key={entry.id} className="p-3 border border-slate-100 bg-slate-50 rounded-lg ml-1 border-l-4 border-l-blue-400 group relative">
                         {editingId === entry.id ? (
                           <div className="space-y-3">
