@@ -1,8 +1,8 @@
 import { useNavigate } from "react-router-dom";
-import { useStore } from "../hooks/useStore";
-import { useAuth } from "../hooks/useAuth";
+import { useStore } from "../../hooks/useStore";
+import { useAuth } from "../../hooks/useAuth";
 import { deleteDoc, doc } from "firebase/firestore";
-import { db } from "../firebase";
+import { db } from "../../firebase";
 import { useState } from "react";
 
 const BlogManagement = () => {

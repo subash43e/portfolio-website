@@ -1,6 +1,6 @@
 // eslint-disable-next-line no-unused-vars
 import { motion } from "framer-motion";
-import ProjectCard from "../ProjectCard";
+import ProjectCard from "../ui/ProjectCard";
 
 const Projects = () => {
   const projects = [

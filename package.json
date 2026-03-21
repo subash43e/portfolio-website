@@ -14,6 +14,8 @@
     "@uiw/react-md-editor": "^4.0.11",
     "firebase": "^12.5.0",
     "framer-motion": "^12.23.24",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.7",
     "lucide-react": "^0.577.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
@@ -21,7 +23,8 @@
     "react-router-dom": "^7.9.5",
     "rehype-raw": "^7.0.0",
     "remark-gfm": "^4.0.1",
-    "tailwindcss": "^4.1.16"
+    "tailwindcss": "^4.1.16",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",

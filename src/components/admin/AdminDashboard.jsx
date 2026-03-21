@@ -1,12 +1,12 @@
 import { useState, useEffect } from "react";
-import { useAuth } from "../hooks/useAuth";
+import { useAuth } from "../../hooks/useAuth";
 import { useNavigate } from "react-router-dom";
-import { auth, db } from "../firebase";
+import { auth, db } from "../../firebase";
 import { updateProfile } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 
-import Model from "./Model";
-import { useStore } from "../hooks/useStore";
+import Model from "../ui/Model";
+import { useStore } from "../../hooks/useStore";
 
 const UserProfileModal = ({ isOpen, onClose }) => {
   const { currentUser } = useAuth();

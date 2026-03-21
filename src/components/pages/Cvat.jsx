@@ -17,10 +17,15 @@ import {
   X,
   Timer,
   ListOrdered,
-  BarChart2
+  BarChart2,
+  FileText,
+  Table
 } from "lucide-react";
+import jsPDF from "jspdf";
+import "jspdf-autotable";
+import * as XLSX from "xlsx";
 
-import useLocalStorage from "../hooks/useLocalStorage";
+import useLocalStorage from "../../hooks/useLocalStorage";
 
 const CvatCalculation = () => {
   const [isWorking, setIsWorking] = useLocalStorage("cvat_isWorking", false);
@@ -83,7 +88,8 @@ const CvatCalculation = () => {
       frameNumber: frameNumber.trim(),
       facesCompleted: parseInt(facesCompleted, 10) || 0,
       durationMinutes,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      startTimeString: new Date(startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
 
     setEntries([newEntry, ...entries]);
@@ -186,9 +192,9 @@ const CvatCalculation = () => {
 
   const handleExportCSV = () => {
     if (finalDisplayEntries.length === 0) return alert("No data to export!");
-    const headers = ["Date", "Time", "File Name", "Frame Number", "Faces Completed", "Duration (Minutes)"];
+    const headers = ["Date", "Start Time", "End Time", "File Name", "Frame Number", "Faces Completed", "Duration (Minutes)"];
     const csvRows = finalDisplayEntries.map(entry => [
-      `"${entry.date}"`, `"${entry.timestamp}"`, `"${entry.fileName}"`, `"${entry.frameNumber}"`, `"${entry.facesCompleted}"`, `"${entry.durationMinutes}"`
+      `"${entry.date}"`, `"${entry.startTimeString || "N/A"}"`, `"${entry.timestamp}"`, `"${entry.fileName}"`, `"${entry.frameNumber}"`, `"${entry.facesCompleted}"`, `"${entry.durationMinutes}"`
     ].join(","));
     
     const csvContent = [headers.join(","), ...csvRows].join("\n");
@@ -201,6 +207,57 @@ const CvatCalculation = () => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const handleExportExcel = () => {
+    if (finalDisplayEntries.length === 0) return alert("No data to export!");
+    const wsData = finalDisplayEntries.map(entry => ({
+      Date: entry.date,
+      "Start Time": entry.startTimeString || "N/A",
+      "End Time": entry.timestamp,
+      "File Name": entry.fileName,
+      "Frame Number": entry.frameNumber,
+      "Faces Completed": entry.facesCompleted,
+      "Duration (Min)": entry.durationMinutes
+    }));
+    const worksheet = XLSX.utils.json_to_sheet(wsData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "CVAT Data");
+    const dateStrForFile = dateFilter === "All Time" ? "all_time" : dateFilter.replace(/\//g, '-');
+    const safeFileName = selectedExportFile === "All" ? "all_files" : selectedExportFile.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    XLSX.writeFile(workbook, `cvat_log_${safeFileName}_${dateStrForFile}.xlsx`);
+  };
+
+  const handleExportPDF = () => {
+    if (finalDisplayEntries.length === 0) return alert("No data to export!");
+    const doc = new jsPDF();
+    doc.text("CVAT Report", 14, 15);
+    
+    const tableColumn = ["Date", "Start Time", "End Time", "File Name", "Frame", "Faces", "Duration (Min)"];
+    const tableRows = [];
+
+    finalDisplayEntries.forEach(entry => {
+      const rowData = [
+        entry.date,
+        entry.startTimeString || "N/A",
+        entry.timestamp,
+        entry.fileName,
+        entry.frameNumber,
+        entry.facesCompleted,
+        entry.durationMinutes
+      ];
+      tableRows.push(rowData);
+    });
+
+    doc.autoTable({
+      head: [tableColumn],
+      body: tableRows,
+      startY: 20,
+    });
+    
+    const dateStrForFile = dateFilter === "All Time" ? "all_time" : dateFilter.replace(/\//g, '-');
+    const safeFileName = selectedExportFile === "All" ? "all_files" : selectedExportFile.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    doc.save(`cvat_report_${safeFileName}_${dateStrForFile}.pdf`);
   };
 
   useEffect(() => {
@@ -231,7 +288,11 @@ const CvatCalculation = () => {
     if (e.key === "Enter") {
       e.preventDefault(); 
       if (frameNumber.trim() !== "") {
-        if (!startTime) setStartTime(Date.now());
+        if (!startTime) {
+          const nowMs = Date.now();
+          setStartTime(nowMs);
+          setNow(nowMs);
+        }
       }
     }
   };
@@ -245,21 +306,22 @@ const CvatCalculation = () => {
 
   const formatStopwatch = (startMs, currentMs) => {
     if (!startMs) return "00:00";
-    const totalSeconds = Math.floor((currentMs - startMs) / 1000);
+    const totalSeconds = Math.max(0, Math.floor((currentMs - startMs) / 1000));
     const m = Math.floor(totalSeconds / 60).toString().padStart(2, "0");
     const s = (totalSeconds % 60).toString().padStart(2, "0");
     return `${m}:${s}`;
   };
 
   const todaysEntries = entries.filter((entry) => entry.date === todayString);
-  const totalFramesCompleted = todaysEntries.length;
-  const totalFacesCompleted = todaysEntries.reduce((sum, entry) => sum + entry.facesCompleted, 0);
-  const totalTimeSpent = todaysEntries.reduce((sum, entry) => sum + entry.durationMinutes, 0);
 
   // --- SLOT CALCULATION LOGIC ---
   const slotNames = ["11:00 AM", "1:00 PM", "2:00 PM", "5:00 PM", "6:00 PM", "Overtime"];
   const slotData = slotNames.reduce((acc, slot) => ({ ...acc, [slot]: [] }), {});
-  const entriesForSlots = dateFilter === "All Time" ? todaysEntries : dateFilteredEntries;
+  const entriesForSlots = dateFilter === "All Time" ? finalDisplayEntries.filter(entry => entry.date === todayString) : finalDisplayEntries;
+  
+  const totalFramesCompleted = entriesForSlots.length;
+  const totalFacesCompleted = entriesForSlots.reduce((sum, entry) => sum + entry.facesCompleted, 0);
+  const totalTimeSpent = entriesForSlots.reduce((sum, entry) => sum + entry.durationMinutes, 0);
 
   entriesForSlots.forEach(entry => {
     let hours = 0, minutes = 0;
@@ -427,21 +489,21 @@ const CvatCalculation = () => {
                     <Calendar size={16} className="text-blue-500" />
                     <span>Frames</span>
                   </div>
-                  <span className="text-2xl font-bold text-blue-600">{dateFilter === "All Time" ? totalFramesCompleted : entriesForSlots.length}</span>
+                  <span className="text-2xl font-bold text-blue-600">{totalFramesCompleted}</span>
                 </div>
                 <div className="bg-purple-50 rounded-xl p-4 flex flex-col justify-between h-24">
                   <div className="flex items-center gap-2 text-slate-500 text-sm">
                     <Eye size={16} className="text-purple-500" />
                     <span>Faces</span>
                   </div>
-                  <span className="text-2xl font-bold text-purple-600">{dateFilter === "All Time" ? totalFacesCompleted : entriesForSlots.reduce((sum, e) => sum + e.facesCompleted, 0)}</span>
+                  <span className="text-2xl font-bold text-purple-600">{totalFacesCompleted}</span>
                 </div>
                 <div className="bg-orange-50 rounded-xl p-4 flex flex-col justify-between h-24">
                   <div className="flex items-center gap-2 text-slate-500 text-sm">
                     <Clock size={16} className="text-orange-500" />
                     <span>Time</span>
                   </div>
-                  <span className="text-2xl font-bold text-orange-600">{dateFilter === "All Time" ? totalTimeSpent : entriesForSlots.reduce((sum, e) => sum + e.durationMinutes, 0)}m</span>
+                  <span className="text-2xl font-bold text-orange-600">{totalTimeSpent}m</span>
                 </div>
               </div>
             )}
@@ -496,7 +558,7 @@ const CvatCalculation = () => {
         </div>
 
         {/* RIGHT COLUMN */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6 flex flex-col h-full min-h-[400px]">
+        <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6 flex flex-col h-[calc(100vh-140px)] min-h-[400px]">
           <div className="flex justify-between items-start mb-4">
             <div className="flex-1 pr-4">
               <h2 className="text-lg font-semibold text-slate-800">Work History</h2>
@@ -515,7 +577,11 @@ const CvatCalculation = () => {
               </div>
             </div>
             <div className="flex flex-col gap-2 shrink-0 mt-1">
-              <button onClick={handleExportCSV} className="flex items-center justify-center gap-2 px-3 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-200 transition-colors"><Download size={14} /> Export</button>
+              <div className="flex gap-2">
+                <button onClick={handleExportCSV} className="flex-1 flex items-center justify-center gap-2 px-3 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-200 transition-colors" title="Export CSV"><Download size={14} /></button>
+                <button onClick={handleExportExcel} className="flex-1 flex items-center justify-center gap-2 px-3 py-1.5 bg-green-50 border border-green-200 rounded-lg text-xs font-medium text-green-700 hover:bg-green-100 transition-colors" title="Export Excel"><Table size={14} /></button>
+                <button onClick={handleExportPDF} className="flex-1 flex items-center justify-center gap-2 px-3 py-1.5 bg-red-50 border border-red-200 rounded-lg text-xs font-medium text-red-700 hover:bg-red-100 transition-colors" title="Export PDF"><FileText size={14} /></button>
+              </div>
               <input type="file" accept=".csv" ref={fileInputRef} onChange={handleImportCSV} className="hidden" />
               <button onClick={() => fileInputRef.current?.click()} className="flex items-center justify-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg text-xs font-medium text-blue-700 hover:bg-blue-100 transition-colors"><Upload size={14} /> Import</button>
             </div>
@@ -551,7 +617,7 @@ const CvatCalculation = () => {
                           <div className="flex justify-between items-center">
                             <div>
                               <p className="font-medium text-slate-800 text-sm">Frame: {entry.frameNumber}</p>
-                              <p className="text-xs text-slate-500">{dateFilter === "All Time" ? `${entry.date} at ` : ""}{entry.timestamp}</p>
+                              <p className="text-xs text-slate-500">{dateFilter === "All Time" ? `${entry.date} at ` : ""}{entry.startTimeString ? `${entry.startTimeString} - ${entry.timestamp}` : entry.timestamp}</p>
                             </div>
                             <div className="flex items-center gap-4">
                               <div className="text-right">
@@ -579,3 +645,12 @@ const CvatCalculation = () => {
 };
 
 export default CvatCalculation;
+
+
+
+
+
+// i need to fix three problem.
+// first one was the ui. if getting to big i give lots of data. I needed a scroll version.
+// second one was the data has exporting is always giving the data as a time is staring time and after time difference only getting, but i need a staring and ending time data so i can she which time end the frame.
+// in timer its always starting at the nagative value i neeed to fix this also.

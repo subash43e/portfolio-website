@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from "react-router-dom";
-import { useStore } from "../hooks/useStore";
-import { useAuth } from "../hooks/useAuth";
+import { useStore } from "../../hooks/useStore";
+import { useAuth } from "../../hooks/useAuth";
 import MDEditor from "@uiw/react-md-editor";
 
 const BlogDetail = () => {

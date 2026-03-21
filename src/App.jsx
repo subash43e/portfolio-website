@@ -9,22 +9,22 @@ import {
 } from "react-router-dom";
 import { useEffect } from "react";
 import { AuthProvider } from "./contexts/AuthContext";
-import Header from "./components/Header";
+import Header from "./components/ui/Header";
 
-import CreateBlog from "./components/CreateBlog";
-import EditProfile from "./components/EditProfile";
-import BlogDetail from "./components/BlogDetail";
-import BlogManagement from "./components/BlogManagement";
-import BlogEdit from "./components/BlogEdit";
+import CreateBlog from "./components/blog/CreateBlog";
+import EditProfile from "./components/admin/EditProfile";
+import BlogDetail from "./components/blog/BlogDetail";
+import BlogManagement from "./components/blog/BlogManagement";
+import BlogEdit from "./components/blog/BlogEdit";
 import { StoreProvider } from "./contexts/StoreContext";
-import CvatCalculation from "./components/Cvat";
+import CvatCalculation from "./components/pages/Cvat";
 
 // Lazy load components for code splitting
-const Home = lazy(() => import("./components/Home"));
-const Blog = lazy(() => import("./components/Blog"));
-const AdminLogin = lazy(() => import("./components/AdminLogin"));
-const AdminDashboard = lazy(() => import("./components/AdminDashboard"));
-const PrivateRoute = lazy(() => import("./components/PrivateRoute"));
+const Home = lazy(() => import("./components/pages/Home"));
+const Blog = lazy(() => import("./components/blog/Blog"));
+const AdminLogin = lazy(() => import("./components/admin/AdminLogin"));
+const AdminDashboard = lazy(() => import("./components/admin/AdminDashboard"));
+const PrivateRoute = lazy(() => import("./components/auth/PrivateRoute"));
 
 function AppContent() {
   const location = useLocation();

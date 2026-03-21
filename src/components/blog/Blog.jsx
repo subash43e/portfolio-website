@@ -1,6 +1,6 @@
 import MDEditor from "@uiw/react-md-editor";
-import { useStore } from "../hooks/useStore";
-import { useAuth } from "../hooks/useAuth";
+import { useStore } from "../../hooks/useStore";
+import { useAuth } from "../../hooks/useAuth";
 import { useNavigate } from "react-router-dom";
 
 const Blog = () => {

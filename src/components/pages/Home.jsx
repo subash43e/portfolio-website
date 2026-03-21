@@ -1,9 +1,9 @@
 import { motion } from 'framer-motion'
-import Hero from "./LandingPage/Hero"
-import About from './LandingPage/About'
-import Skills from './LandingPage/Skills'
-import Projects from './LandingPage/Projects'
-import Contact from './LandingPage/Contact'
+import Hero from "../LandingPage/Hero"
+import About from '../LandingPage/About'
+import Skills from '../LandingPage/Skills'
+import Projects from '../LandingPage/Projects'
+import Contact from '../LandingPage/Contact'
 
 const containerVariants = {
   hidden: { opacity: 0 },
