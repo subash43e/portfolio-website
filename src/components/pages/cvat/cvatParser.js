@@ -1,3 +1,16 @@
+export const getTotalFrameCount = (xmlString) => {
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlString, "text/xml");
+  const images = xmlDoc.getElementsByTagName("image");
+  let maxFrame = 0;
+  for (let i = 0; i < images.length; i++) {
+    let frameNumber = parseInt(images[i].getAttribute('id'), 10) || 0;
+    if (frameNumber > maxFrame) maxFrame = frameNumber;
+  }
+  // Return total count and max frame id
+  return { totalCount: images.length, maxFrameId: maxFrame };
+};
+
 export const parseCVATXML = (xmlString, startFrame = null, endFrame = null) => {
   const parser = new DOMParser();
   const xmlDoc = parser.parseFromString(xmlString, "text/xml");
