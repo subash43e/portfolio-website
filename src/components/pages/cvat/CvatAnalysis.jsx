@@ -1,31 +1,38 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
-import { 
+import {
   Upload, FileCode, BarChart2, AlertCircle, CheckCircle2,
-  ArrowLeft, Trash2, Calendar, Clock, Search, Filter, Plus, Minus
+  ArrowLeft, Trash2, Calendar, Clock, Search, Filter, Scissors
 } from "lucide-react";
 import JSZip from "jszip";
 import { parseCVATXML, getTotalFrameCount } from "./cvatParser";
 import { useNavigate } from "react-router-dom";
 import useLocalStorage from "../../../hooks/useLocalStorage";
 
-/**
- * Convert a pixel offset on the bar to a frame number.
- */
 const posToFrame = (posPercent, maxFrame) =>
   Math.round((posPercent / 100) * maxFrame);
 
-const frameToPos = (frame, maxFrame) =>
-  maxFrame > 0 ? (frame / maxFrame) * 100 : 0;
+// A refined, accessible 10-hue palette — distinct but harmonious
+const PALETTE = [
+  { bg: '#6366f1', light: '#eef2ff', text: '#4338ca' }, // violet
+  { bg: '#0ea5e9', light: '#e0f2fe', text: '#0369a1' }, // sky
+  { bg: '#10b981', light: '#ecfdf5', text: '#047857' }, // emerald
+  { bg: '#f59e0b', light: '#fffbeb', text: '#b45309' }, // amber
+  { bg: '#ef4444', light: '#fef2f2', text: '#b91c1c' }, // red
+  { bg: '#8b5cf6', light: '#f5f3ff', text: '#6d28d9' }, // purple
+  { bg: '#ec4899', light: '#fdf2f8', text: '#be185d' }, // pink
+  { bg: '#14b8a6', light: '#f0fdfa', text: '#0f766e' }, // teal
+  { bg: '#f97316', light: '#fff7ed', text: '#c2410c' }, // orange
+  { bg: '#06b6d4', light: '#ecfeff', text: '#0e7490' }, // cyan
+];
 
 const CvatAnalysis = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [fileInfo, setFileInfo] = useLocalStorage("cvat_current_fileInfo", null);
   const [rawXml, setRawXml] = useLocalStorage("cvat_current_rawXml", null);
   const [maxFrame, setMaxFrame] = useLocalStorage("cvat_current_maxFrame", 0);
-  // dividers: array of percentages (0-100) representing positions on the timeline
   const [dividers, setDividers] = useLocalStorage("cvat_current_dividers", []);
   const [numSegments, setNumSegments] = useState(1);
-  const [segInputVal, setSegInputVal] = useState("1");
+  const [hoveredSegIdx, setHoveredSegIdx] = useState(null);
   const [segmentResults, setSegmentResults] = useState([]);
   const [fullStats, setFullStats] = useLocalStorage("cvat_current_fullStats", null);
   const [error, setError] = useState(null);
@@ -38,31 +45,11 @@ const CvatAnalysis = () => {
   const draggingIdx = useRef(null);
   const navigate = useNavigate();
 
-  // Sync numSegments from stored dividers on first load
   useEffect(() => {
     if (fileInfo) setNumSegments(dividers.length + 1);
   }, [fileInfo]); // eslint-disable-line
 
-  // Build equally-spaced dividers when user changes segment count
-  const handleSegmentCountChange = (count) => {
-    const n = Math.max(1, Math.min(20, count));
-    setNumSegments(n);
-    setSegInputVal(String(n));
-    if (n <= 1) {
-      setDividers([]);
-    } else {
-      const newDividers = Array.from({ length: n - 1 }, (_, i) =>
-        ((i + 1) / n) * 100
-      );
-      setDividers(newDividers);
-    }
-    setSegmentResults([]);
-  };
-
   // --- File Upload ---
-  const handleFileDragOver = (e) => { e.preventDefault(); setIsDragging(true); };
-  const handleFileDragLeave = (e) => { e.preventDefault(); setIsDragging(false); };
-
   const processFile = async (file) => {
     setError(null);
     if (!file) return;
@@ -72,7 +59,7 @@ const CvatAnalysis = () => {
       return;
     }
     if (file.size > 104857600) {
-      setError("File is too large. Maximum 100MB allowed.");
+      setError("File is too large (max 100MB).");
       return;
     }
     try {
@@ -114,31 +101,24 @@ const CvatAnalysis = () => {
     }
   };
 
-  const handleFileDrop = (e) => {
-    e.preventDefault(); setIsDragging(false);
-    processFile(e.dataTransfer.files[0]);
-  };
-  const handleFileInput = (e) => processFile(e.target.files[0]);
-
   const handleReset = () => {
     setFileInfo(null); setRawXml(null); setMaxFrame(0);
-    setFullStats(null); setDividers([]); setNumSegments(1); setSegmentResults([]); setError(null);
+    setFullStats(null); setDividers([]); setNumSegments(1);
+    setSegmentResults([]); setError(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  // --- Timeline Drag ---
+  // --- Timeline drag ---
   const getBarPercent = useCallback((clientX) => {
     const bar = timelineRef.current;
     if (!bar) return 0;
     const rect = bar.getBoundingClientRect();
-    const pct = ((clientX - rect.left) / rect.width) * 100;
-    return Math.max(0.5, Math.min(99.5, pct));
+    return Math.max(0.5, Math.min(99.5, ((clientX - rect.left) / rect.width) * 100));
   }, []);
 
   const handleDividerMouseDown = (e, idx) => {
     e.preventDefault();
     draggingIdx.current = idx;
-
     const onMove = (mv) => {
       const pct = getBarPercent(mv.clientX);
       setDividers(prev => {
@@ -149,21 +129,17 @@ const CvatAnalysis = () => {
         return next;
       });
     };
-
     const onUp = () => {
       draggingIdx.current = null;
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
-      setSegmentResults([]); // Clear results when range changes
+      setSegmentResults([]);
     };
-
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
   };
 
-  // Touch support
   const handleDividerTouchStart = (e, idx) => {
-    draggingIdx.current = idx;
     const onMove = (tv) => {
       const pct = getBarPercent(tv.touches[0].clientX);
       setDividers(prev => {
@@ -175,7 +151,6 @@ const CvatAnalysis = () => {
       });
     };
     const onEnd = () => {
-      draggingIdx.current = null;
       window.removeEventListener('touchmove', onMove);
       window.removeEventListener('touchend', onEnd);
       setSegmentResults([]);
@@ -184,7 +159,15 @@ const CvatAnalysis = () => {
     window.addEventListener('touchend', onEnd);
   };
 
-  // Build segments array from dividers
+  const handleDeleteSegment = (i) => {
+    if (dividers.length === 0) return;
+    const divIdx = i < dividers.length ? i : i - 1;
+    setDividers(prev => prev.filter((_, idx) => idx !== divIdx));
+    setNumSegments(prev => Math.max(1, prev - 1));
+    setSegmentResults([]);
+  };
+
+  // Build segments from divider positions
   const getSegments = () => {
     const positions = [0, ...dividers, 100];
     return positions.slice(0, -1).map((start, i) => {
@@ -194,11 +177,10 @@ const CvatAnalysis = () => {
         endFrame: posToFrame(end, maxFrame),
         startPct: start,
         endPct: end,
-        label: `Segment ${i + 1}`,
+        label: `S${i + 1}`,
       };
     });
   };
-
   const segments = getSegments();
 
   // --- Analysis ---
@@ -206,29 +188,28 @@ const CvatAnalysis = () => {
     if (!rawXml) return;
     try {
       setError(null);
-      const results = segments.map(seg => {
-        const res = parseCVATXML(rawXml, seg.startFrame, seg.endFrame);
-        return { ...seg, results: res };
-      });
+      const results = segments.map(seg => ({
+        ...seg,
+        results: parseCVATXML(rawXml, seg.startFrame, seg.endFrame),
+      }));
       setSegmentResults(results);
     } catch (err) {
       setError(err.message || "Analysis failed.");
     }
   };
 
-  const deleteHistoryEntry = (id) => setHistory(history.filter(h => h.id !== id));
-
   const saveToHistory = () => {
     if (!fileInfo || segmentResults.length === 0) return;
     const entries = segmentResults.map(seg => ({
       id: Date.now() + Math.random(),
       date: new Date().toLocaleDateString(),
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       ...seg.results,
-      fileName: `${fileInfo.fileName} [${seg.label}: ${seg.startFrame}–${seg.endFrame}]`
+      fileName: `${fileInfo.fileName} [${seg.label}: ${seg.startFrame}–${seg.endFrame}]`,
     }));
     setHistory(prev => [...entries, ...prev]);
   };
+
+  const deleteHistoryEntry = (id) => setHistory(history.filter(h => h.id !== id));
 
   const availableDates = [...new Set(history.map(h => h.date))].sort((a, b) => new Date(b) - new Date(a));
   const filteredHistory = history.filter(entry => {
@@ -237,307 +218,347 @@ const CvatAnalysis = () => {
     return matchesSearch && matchesDate;
   });
 
-  // Segment color palette
-  const COLORS = [
-    '#3b82f6','#8b5cf6','#10b981','#f59e0b','#ef4444',
-    '#06b6d4','#ec4899','#84cc16','#f97316','#6366f1',
-  ];
-
   return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-800">
-      <div className="max-w-6xl mx-auto px-6 py-8">
+    <div className="min-h-screen bg-[#f8f9fc] font-sans text-slate-800">
+      <div className="max-w-5xl mx-auto px-5 py-10">
 
-        {/* Header */}
-        <div className="mb-8 relative">
-          <button onClick={() => navigate('/cvat')} className="absolute left-0 top-1/2 -translate-y-1/2 flex items-center gap-2 text-slate-500 hover:text-blue-600 transition-colors bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm text-sm">
-            <ArrowLeft size={16} /> Tracker
+        {/* ── Header ── */}
+        <div className="flex items-center justify-between mb-10">
+          <button
+            onClick={() => navigate('/cvat')}
+            className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 transition-colors"
+          >
+            <ArrowLeft size={15} /> Back
           </button>
           <div className="text-center">
-            <div className="flex items-center justify-center gap-3 mb-1">
-              <BarChart2 size={32} className="text-slate-900" />
-              <h1 className="text-3xl font-bold text-slate-900">CVAT XML Analysis</h1>
-            </div>
-            <p className="text-slate-500 text-sm">Export <strong>CVAT for Images 1.1</strong> → drop file → drag segments → analyze.</p>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900">CVAT Analysis</h1>
+            <p className="text-xs text-slate-400 mt-0.5">Annotation report for <strong>CVAT for Images 1.1</strong></p>
           </div>
+          <div className="w-16" /> {/* spacer to center title */}
         </div>
 
-        {/* Upload Zone */}
+        {/* ── Upload Zone ── */}
         {!fileInfo && (
           <div
-            className={`border-2 border-dashed rounded-2xl p-16 text-center transition-all cursor-pointer ${isDragging ? "border-blue-500 bg-blue-50" : "border-slate-300 bg-white hover:border-blue-400 hover:bg-slate-50"}`}
-            onDragOver={handleFileDragOver}
-            onDragLeave={handleFileDragLeave}
-            onDrop={handleFileDrop}
+            className={`group border-2 border-dashed rounded-2xl px-8 py-20 text-center transition-all duration-200 cursor-pointer
+              ${isDragging ? "border-indigo-400 bg-indigo-50/60 scale-[1.01]" : "border-slate-200 bg-white hover:border-indigo-300 hover:bg-slate-50/80"}`}
+            onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+            onDragLeave={(e) => { e.preventDefault(); setIsDragging(false); }}
+            onDrop={(e) => { e.preventDefault(); setIsDragging(false); processFile(e.dataTransfer.files[0]); }}
             onClick={() => fileInputRef.current?.click()}
           >
-            <input type="file" accept=".xml,.zip,.XML,.ZIP" className="hidden" ref={fileInputRef} onChange={handleFileInput} />
-            <div className="flex justify-center mb-4">
-              <div className="p-4 bg-slate-100 rounded-full text-blue-500"><Upload size={32} /></div>
+            <input type="file" accept=".xml,.zip,.XML,.ZIP" className="hidden" ref={fileInputRef}
+              onChange={(e) => processFile(e.target.files[0])} />
+            <div className="flex justify-center mb-5">
+              <div className={`p-5 rounded-2xl transition-colors ${isDragging ? 'bg-indigo-100 text-indigo-500' : 'bg-slate-100 text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-400'}`}>
+                <Upload size={28} />
+              </div>
             </div>
-            <h3 className="text-lg font-semibold text-slate-800 mb-2">Drag & Drop your ZIP or XML File</h3>
-            <p className="text-slate-500 mb-6">or click to browse — max 100MB</p>
+            <h3 className="text-base font-semibold text-slate-700 mb-1">Drop your CVAT file here</h3>
+            <p className="text-sm text-slate-400">Supports <code className="text-xs bg-slate-100 px-1 rounded">.xml</code> and <code className="text-xs bg-slate-100 px-1 rounded">.zip</code> · Max 100MB</p>
             {error && (
-              <div className="inline-flex items-center gap-2 text-red-600 bg-red-50 px-4 py-2 rounded-lg border border-red-200 text-sm">
-                <AlertCircle size={16} /> {error}
+              <div className="inline-flex items-center gap-2 mt-5 text-red-600 bg-red-50 px-4 py-2 rounded-xl border border-red-100 text-sm">
+                <AlertCircle size={15} /> {error}
               </div>
             )}
           </div>
         )}
 
-        {/* Main UI after file is loaded */}
+        {/* ── After Upload ── */}
         {fileInfo && (
-          <div className="space-y-6 animate-in fade-in">
+          <div className="space-y-5">
 
-            {/* File info strip */}
-            <div className="bg-white rounded-xl shadow-sm border border-slate-100 px-5 py-3 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+            {/* File strip */}
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm px-5 py-3.5 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="p-1.5 bg-blue-50 text-blue-600 rounded-lg"><FileCode size={18} /></div>
+                <div className="p-2 bg-indigo-50 text-indigo-500 rounded-xl"><FileCode size={16} /></div>
                 <div>
-                  <p className="font-semibold text-slate-800 text-sm">{fileInfo.fileName}</p>
-                  <p className="text-xs text-slate-500">{(fileInfo.totalSize / 1024 / 1024).toFixed(2)} MB &nbsp;·&nbsp; Max Frame: <strong>{maxFrame}</strong></p>
+                  <p className="text-sm font-semibold text-slate-800 leading-tight">{fileInfo.fileName}</p>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {(fileInfo.totalSize / 1024 / 1024).toFixed(2)} MB &nbsp;·&nbsp;
+                    <span className="font-medium text-slate-600">{maxFrame + 1}</span> total frames
+                  </p>
                 </div>
               </div>
-              <button onClick={handleReset} className="text-xs text-slate-500 hover:text-red-500 border border-slate-200 px-3 py-1.5 rounded-lg hover:border-red-300 transition-colors">
-                Upload New File
+              <button
+                onClick={handleReset}
+                className="text-xs text-slate-400 hover:text-red-500 transition-colors px-3 py-1.5 rounded-lg hover:bg-red-50"
+              >
+                Change file
               </button>
             </div>
 
-            {/* Full File Overview Card */}
+            {/* Full file overview */}
             {fullStats && (
-              <div className="bg-white rounded-xl shadow-sm border border-slate-100 px-5 py-4">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3">Full File Overview</p>
-                <div className="grid grid-cols-4 md:grid-cols-8 gap-3">
+              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-4">Full File Summary</p>
+                <div className="grid grid-cols-4 md:grid-cols-8 gap-2">
                   {[
-                    { label: 'Total Frames', value: fullStats.totalImages, color: '#1e293b' },
+                    { label: 'Frames', value: fullStats.totalImages, color: '#1e293b' },
                     { label: 'Annotated', value: fullStats.annotatedImages, color: '#10b981' },
-                    { label: 'Faces', value: fullStats.groupedMetrics.faces, color: '#8b5cf6' },
-                    { label: 'Left Eye', value: fullStats.groupedMetrics.eyesLeft, color: '#3b82f6' },
-                    { label: 'Right Eye', value: fullStats.groupedMetrics.eyesRight, color: '#60a5fa' },
-                    { label: 'Noses', value: fullStats.groupedMetrics.noses, color: '#f97316' },
+                    { label: 'Faces', value: fullStats.groupedMetrics.faces, color: '#6366f1' },
+                    { label: 'L. Eye', value: fullStats.groupedMetrics.eyesLeft, color: '#0ea5e9' },
+                    { label: 'R. Eye', value: fullStats.groupedMetrics.eyesRight, color: '#0ea5e9' },
+                    { label: 'Noses', value: fullStats.groupedMetrics.noses, color: '#f59e0b' },
                     { label: 'L. Mouth', value: fullStats.groupedMetrics.mouthsLeft, color: '#ef4444' },
                     { label: 'R. Mouth', value: fullStats.groupedMetrics.mouthsRight, color: '#ec4899' },
-                  ].map(card => (
-                    <div key={card.label} className="text-center">
-                      <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">{card.label}</p>
-                      <p className="text-lg font-black" style={{ color: card.color }}>{card.value}</p>
+                  ].map(({ label, value, color }) => (
+                    <div key={label} className="text-center p-2 rounded-xl hover:bg-slate-50 transition-colors">
+                      <p className="text-[9px] uppercase tracking-wider font-semibold text-slate-400 mb-1">{label}</p>
+                      <p className="text-xl font-black" style={{ color }}>{value}</p>
                     </div>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Timeline Segmenter Card */}
-            <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-3">
+            {/* ── Timeline Segmenter ── */}
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+              <div className="flex items-start justify-between mb-1">
                 <div>
-                  <h2 className="font-semibold text-slate-800">Frame Range Segmenter</h2>
-                  <p className="text-xs text-slate-500 mt-0.5">Set how many segments you need, then drag the dividers to adjust ranges.</p>
+                  <h2 className="text-sm font-bold text-slate-800">Frame Range Segmenter</h2>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Click the timeline to split · Drag handles to resize · Hover to delete
+                  </p>
                 </div>
-                {/* Segment counter */}
-                <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 shadow-sm">
-                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Segments:</span>
-                  <button onClick={() => handleSegmentCountChange(numSegments - 1)} className="w-6 h-6 flex items-center justify-center rounded bg-white border border-slate-200 hover:border-red-300 hover:text-red-500 transition-colors shadow-sm">
-                    <Minus size={12} />
-                  </button>
-                  <span className="text-base font-black text-slate-800 w-6 text-center">{numSegments}</span>
-                  <button onClick={() => handleSegmentCountChange(numSegments + 1)} className="w-6 h-6 flex items-center justify-center rounded bg-white border border-slate-200 hover:border-blue-300 hover:text-blue-500 transition-colors shadow-sm">
-                    <Plus size={12} />
-                  </button>
-                </div>
+                <span className="text-[10px] font-semibold text-slate-400 bg-slate-100 px-2 py-1 rounded-lg">
+                  {segments.length} {segments.length === 1 ? 'segment' : 'segments'}
+                </span>
               </div>
 
-              {/* The Timeline Bar */}
-              <div
-                ref={timelineRef}
-                className="relative h-14 rounded-xl overflow-hidden cursor-default select-none"
-                style={{ background: '#e2e8f0' }}
-              >
-                <p className="absolute -top-5 right-0 text-[9px] text-slate-400 italic">Click on a segment to split it</p>
-                {/* Colored segments — click to split */}
-                {segments.map((seg, i) => (
-                  <div
-                    key={i}
-                    className="absolute top-0 h-full flex flex-col items-center justify-center transition-all overflow-hidden cursor-pointer hover:brightness-110"
-                    title="Click to split this segment"
-                    style={{
-                      left: `${seg.startPct}%`,
-                      width: `${seg.endPct - seg.startPct}%`,
-                      background: COLORS[i % COLORS.length],
-                      opacity: 0.85,
-                    }}
-                    onClick={(e) => {
-                      const bar = timelineRef.current;
-                      if (!bar) return;
-                      const rect = bar.getBoundingClientRect();
-                      const pct = Math.max(0.5, Math.min(99.5, ((e.clientX - rect.left) / rect.width) * 100));
-                      setDividers(prev => [...prev, pct].sort((a, b) => a - b));
-                      setNumSegments(prev => prev + 1);
-                      setSegInputVal(prev => String(parseInt(prev, 10) + 1));
-                      setSegmentResults([]);
-                    }}
-                  >
-                    <span className="text-white text-[10px] font-black uppercase tracking-widest drop-shadow select-none truncate px-2 leading-tight">
-                      {seg.label}
-                    </span>
-                    <span className="text-white/80 text-[9px] font-bold drop-shadow select-none leading-tight">
-                      {seg.endFrame - seg.startFrame} frames
-                    </span>
-                  </div>
-                ))}
+              {/* Timeline bar — taller for easy interaction */}
+              <div className="mt-5 mb-1">
+                <div
+                  ref={timelineRef}
+                  className="relative h-16 rounded-xl overflow-visible select-none"
+                  style={{ background: '#e2e8f0' }}
+                >
+                  {/* Segment blocks */}
+                  {segments.map((seg, i) => {
+                    const color = PALETTE[i % PALETTE.length];
+                    const isHovered = hoveredSegIdx === i;
+                    return (
+                      <div
+                        key={i}
+                        className="absolute top-0 h-full flex flex-col items-center justify-center cursor-pointer transition-all duration-150 overflow-hidden rounded-[inherit]"
+                        style={{
+                          left: `${seg.startPct}%`,
+                          width: `${seg.endPct - seg.startPct}%`,
+                          background: color.bg,
+                          opacity: isHovered ? 0.95 : 0.82,
+                        }}
+                        onMouseEnter={() => setHoveredSegIdx(i)}
+                        onMouseLeave={() => setHoveredSegIdx(null)}
+                        onClick={(e) => {
+                          if (e.target.closest('[data-delete]')) return;
+                          const bar = timelineRef.current;
+                          if (!bar) return;
+                          const rect = bar.getBoundingClientRect();
+                          const pct = Math.max(0.5, Math.min(99.5, ((e.clientX - rect.left) / rect.width) * 100));
+                          setDividers(prev => [...prev, pct].sort((a, b) => a - b));
+                          setNumSegments(prev => prev + 1);
+                          setSegmentResults([]);
+                        }}
+                      >
+                        {/* Hover overlay: dim + show delete */}
+                        {isHovered && dividers.length > 0 && (
+                          <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
+                            <button
+                              data-delete="true"
+                              onClick={(e) => { e.stopPropagation(); handleDeleteSegment(i); }}
+                              className="w-8 h-8 bg-white/90 rounded-full flex items-center justify-center shadow-md hover:bg-red-50 hover:text-red-600 text-slate-600 transition-colors"
+                              title="Remove segment"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        )}
+                        {/* Segment content */}
+                        {!isHovered && (
+                          <>
+                            <span className="text-white text-[11px] font-bold drop-shadow select-none leading-tight">
+                              {seg.label}
+                            </span>
+                            <span className="text-white/70 text-[9px] select-none leading-tight font-medium">
+                              {seg.endFrame - seg.startFrame}f
+                            </span>
+                          </>
+                        )}
+                        {/* Hover: show scissors hint */}
+                        {isHovered && dividers.length === 0 && (
+                          <Scissors size={14} className="text-white/70" />
+                        )}
+                      </div>
+                    );
+                  })}
 
-                {/* Draggable dividers */}
-                {dividers.map((pct, idx) => (
-                  <div
-                    key={idx}
-                    className="absolute top-0 h-full flex items-center justify-center z-20 group"
-                    style={{ left: `${pct}%`, transform: 'translateX(-50%)', cursor: 'col-resize' }}
-                    onMouseDown={(e) => handleDividerMouseDown(e, idx)}
-                    onTouchStart={(e) => handleDividerTouchStart(e, idx)}
-                  >
-                    {/* Divider visual */}
-                    <div className="w-[3px] h-full bg-white shadow-md group-hover:bg-yellow-300 transition-colors"></div>
-                    {/* Handle knob */}
-                    <div className="absolute w-5 h-5 rounded-full bg-white border-2 border-slate-400 shadow-lg group-hover:border-yellow-400 group-hover:scale-110 transition-all flex items-center justify-center">
-                      <div className="w-1.5 h-3 flex flex-col justify-center items-center gap-[2px]">
-                        <div className="w-[2px] h-[2px] bg-slate-400 rounded-full"></div>
-                        <div className="w-[2px] h-[2px] bg-slate-400 rounded-full"></div>
-                        <div className="w-[2px] h-[2px] bg-slate-400 rounded-full"></div>
+                  {/* Draggable divider handles */}
+                  {dividers.map((pct, idx) => (
+                    <div
+                      key={idx}
+                      className="absolute top-0 h-full z-20 flex items-center justify-center group"
+                      style={{ left: `${pct}%`, transform: 'translateX(-50%)', cursor: 'col-resize', width: '20px' }}
+                      onMouseDown={(e) => handleDividerMouseDown(e, idx)}
+                      onTouchStart={(e) => handleDividerTouchStart(e, idx)}
+                    >
+                      {/* Line */}
+                      <div className="w-0.5 h-full bg-white/80 group-hover:bg-white transition-colors shadow-sm" />
+                      {/* Knob */}
+                      <div className="absolute w-4 h-6 bg-white rounded shadow-lg flex flex-col items-center justify-center gap-[3px] group-hover:scale-110 transition-transform">
+                        <div className="w-1 h-1 bg-slate-300 rounded-full" />
+                        <div className="w-1 h-1 bg-slate-300 rounded-full" />
+                        <div className="w-1 h-1 bg-slate-300 rounded-full" />
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
 
-              {/* Segment info labels under the bar */}
-              <div className="relative mt-2 h-10">
-                {segments.map((seg, i) => {
-                  const res = segmentResults[i]?.results;
-                  return (
-                    <div
-                      key={i}
-                      className="absolute text-center px-1"
-                      style={{ left: `${seg.startPct}%`, width: `${seg.endPct - seg.startPct}%` }}
-                    >
-                      <p className="text-[9px] font-mono text-slate-400 whitespace-nowrap truncate">
-                        {seg.startFrame} – {seg.endFrame}
-                      </p>
-                      {res && (
-                        <p className="text-[9px] text-slate-500 whitespace-nowrap truncate mt-0.5">
-                          <span className="text-emerald-600 font-semibold">{res.annotatedImages}✓</span>
-                          <span className="mx-1 text-slate-300">|</span>
-                          <span className="text-slate-500">{res.groupedMetrics.faces}F {res.groupedMetrics.eyesLeft + res.groupedMetrics.eyesRight}E {res.groupedMetrics.noses}N</span>
+                {/* Frame labels below bar */}
+                <div className="relative mt-2" style={{ height: segmentResults.length > 0 ? '36px' : '18px' }}>
+                  {segments.map((seg, i) => {
+                    const res = segmentResults[i]?.results;
+                    return (
+                      <div
+                        key={i}
+                        className="absolute text-center"
+                        style={{ left: `${seg.startPct}%`, width: `${seg.endPct - seg.startPct}%` }}
+                      >
+                        <p className="text-[9px] font-mono text-slate-400 truncate px-1">
+                          {seg.startFrame}–{seg.endFrame}
                         </p>
-                      )}
-                    </div>
-                  );
-                })}
+                        {res && (
+                          <p className="text-[9px] text-slate-500 truncate px-1 mt-0.5">
+                            <span className="text-emerald-600 font-semibold">{res.annotatedImages}✓</span>
+                            <span className="mx-1 text-slate-300">·</span>
+                            <span>{res.groupedMetrics.faces}F</span>
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
 
               {error && (
-                <div className="mt-3 flex items-center gap-2 text-red-600 bg-red-50 px-4 py-2 rounded-lg border border-red-200 text-sm">
-                  <AlertCircle size={16} /> {error}
+                <div className="flex items-center gap-2 mt-3 text-red-600 bg-red-50 px-4 py-2.5 rounded-xl border border-red-100 text-sm">
+                  <AlertCircle size={15} /> {error}
                 </div>
               )}
 
-              {/* Action Buttons */}
-              <div className="flex flex-col sm:flex-row justify-end gap-3 mt-6 pt-5 border-t border-slate-100">
-                <button onClick={saveToHistory} disabled={segmentResults.length === 0} className="px-5 py-2 bg-blue-50 border border-blue-200 text-blue-700 font-semibold rounded-lg text-sm hover:bg-blue-100 hover:border-blue-300 transition-colors flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
+              {/* Actions */}
+              <div className="flex items-center justify-between mt-6 pt-5 border-t border-slate-100">
+                <button
+                  onClick={saveToHistory}
+                  disabled={segmentResults.length === 0}
+                  className="flex items-center gap-2 text-sm text-slate-500 hover:text-indigo-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors px-3 py-2 rounded-xl hover:bg-indigo-50"
+                >
                   <CheckCircle2 size={15} /> Save to History
                 </button>
-                <button onClick={handleAnalyze} className="px-6 py-2 bg-slate-800 text-white font-bold rounded-lg text-sm hover:bg-slate-700 transition-colors shadow-md flex items-center justify-center gap-2">
-                  <BarChart2 size={15} /> Analyze {numSegments} {numSegments === 1 ? 'Segment' : 'Segments'}
+                <button
+                  onClick={handleAnalyze}
+                  className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold rounded-xl text-sm transition-all shadow-sm shadow-indigo-200 hover:shadow-indigo-300"
+                >
+                  <BarChart2 size={15} />
+                  Analyze {segments.length} {segments.length === 1 ? 'Segment' : 'Segments'}
                 </button>
               </div>
             </div>
 
-            {/* Results stacked per segment */}
+            {/* ── Segment Results ── */}
             {segmentResults.length > 0 && (
-              <div className="space-y-10">
+              <div className="space-y-4">
                 {segmentResults.map((seg, index) => {
                   const results = seg.results;
+                  const color = PALETTE[index % PALETTE.length];
                   return (
-                    <div key={index} className="relative mt-10 animate-in slide-in-from-bottom-4">
-                      {/* Segment badge */}
-                      <div className="absolute top-0 left-5 -translate-y-1/2 flex items-center gap-2 z-10">
-                        <div
-                          className="text-white px-4 py-1.5 rounded-full text-sm font-bold tracking-wide shadow-md border-[3px] border-white flex items-center gap-2"
-                          style={{ background: COLORS[index % COLORS.length] }}
-                        >
-                          {seg.label}
+                    <div
+                      key={index}
+                      className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden"
+                    >
+                      {/* Segment header bar */}
+                      <div
+                        className="px-5 py-3 flex items-center justify-between"
+                        style={{ background: color.light, borderBottom: `1px solid ${color.bg}22` }}
+                      >
+                        <div className="flex items-center gap-3">
+                          <span
+                            className="text-xs font-bold px-2.5 py-1 rounded-lg"
+                            style={{ background: color.bg, color: '#fff' }}
+                          >
+                            {seg.label}
+                          </span>
+                          <span className="text-xs font-mono font-medium" style={{ color: color.text }}>
+                            Frames {seg.startFrame} → {seg.endFrame}
+                          </span>
                         </div>
-                        <div className="bg-white border-2 border-slate-200 text-slate-600 px-3 py-1.5 rounded-full text-xs font-mono font-medium shadow-sm">
-                          Frames {seg.startFrame} → {seg.endFrame}
-                        </div>
+                        <span className="text-xs font-semibold" style={{ color: color.text }}>
+                          {results.annotatedImages} / {results.totalImages} annotated
+                        </span>
                       </div>
 
-                      <div className="bg-white rounded-xl shadow-sm border-2 border-t-8 p-6 pt-10" style={{ borderColor: COLORS[index % COLORS.length], borderTopColor: COLORS[index % COLORS.length] }}>
-                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+                      {/* Metrics grid */}
+                      <div className="p-5">
+                        <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
                           {[
-                            { label: 'Total Frames', value: results.totalImages, subLabel: `${results.annotatedImages} annotated`, subColor: '#10b981', color: '#1e293b' },
-                            { label: 'Annotated', value: results.annotatedImages, color: '#10b981' },
-                            { label: 'Total Faces', value: results.groupedMetrics.faces, color: '#8b5cf6' },
-                            { label: 'Left Eye', value: results.groupedMetrics.eyesLeft, color: '#3b82f6' },
-                            { label: 'Right Eye', value: results.groupedMetrics.eyesRight, color: '#60a5fa' },
-                            { label: 'Noses', value: results.groupedMetrics.noses, color: '#f97316' },
-                            { label: 'Left Mouth', value: results.groupedMetrics.mouthsLeft, color: '#ef4444' },
-                            { label: 'Right Mouth', value: results.groupedMetrics.mouthsRight, color: '#ec4899' },
-                          ].map(card => (
-                            <div key={card.label} className="bg-slate-50 rounded-xl border border-slate-100 p-4 hover:shadow-md transition-shadow flex flex-col justify-between" style={{ borderTopWidth: 4, borderTopColor: card.color }}>
-                              <h3 className="text-[10px] font-bold tracking-wider text-slate-500 uppercase mb-1">{card.label}</h3>
-                              <p className="text-2xl font-black" style={{ color: card.color }}>{card.value}</p>
-                              {card.subLabel && (
-                                <div className="mt-1 text-[9px] font-bold tracking-wide px-1 py-0.5 rounded inline-block w-max" style={{ color: card.subColor, background: '#ecfdf5' }}>
-                                  {card.subLabel}
-                                </div>
-                              )}
+                            { label: 'Faces', value: results.groupedMetrics.faces, color: '#6366f1' },
+                            { label: 'L. Eye', value: results.groupedMetrics.eyesLeft, color: '#0ea5e9' },
+                            { label: 'R. Eye', value: results.groupedMetrics.eyesRight, color: '#0ea5e9' },
+                            { label: 'Noses', value: results.groupedMetrics.noses, color: '#f59e0b' },
+                            { label: 'L. Mouth', value: results.groupedMetrics.mouthsLeft, color: '#ef4444' },
+                            { label: 'R. Mouth', value: results.groupedMetrics.mouthsRight, color: '#ec4899' },
+                          ].map(({ label, value, color: c }) => (
+                            <div key={label} className="bg-slate-50/70 rounded-xl p-3 text-center hover:bg-slate-100 transition-colors">
+                              <p className="text-[9px] uppercase tracking-wider font-semibold text-slate-400 mb-1">{label}</p>
+                              <p className="text-2xl font-black" style={{ color: c }}>{value}</p>
                             </div>
                           ))}
                         </div>
 
                         {/* Advanced Attributes */}
                         {(Object.keys(results.faceAngles || {}).length > 0 || Object.keys(results.faceOcclusions || {}).length > 0) && (
-                          <div className="mt-6 p-5 bg-slate-50 rounded-xl border border-slate-100 border-l-4" style={{ borderLeftColor: COLORS[index % COLORS.length] }}>
-                            <h3 className="text-sm font-bold text-slate-800 mb-5 flex items-center gap-2">
-                              <BarChart2 size={15} className="text-slate-500" /> Advanced Face Attributes
-                            </h3>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                              {Object.keys(results.faceAngles || {}).length > 0 && (
-                                <div>
-                                  <h4 className="text-[11px] uppercase font-bold tracking-wider text-slate-500 mb-3 border-b border-slate-200 pb-2">Face Angles</h4>
-                                  <div className="space-y-3">
-                                    {Object.entries(results.faceAngles).sort(([,a],[,b])=>b-a).map(([angle, count]) => (
-                                      <div key={angle}>
-                                        <div className="flex justify-between text-xs mb-1">
-                                          <span className="font-medium text-slate-700">{angle}</span>
-                                          <span className="font-bold text-slate-800">{count}</span>
-                                        </div>
-                                        <div className="w-full bg-slate-200 rounded-full h-1.5">
-                                          <div className="h-1.5 rounded-full" style={{ width: `${Math.min((count / Math.max(results.groupedMetrics.faces, 1)) * 100, 100)}%`, background: COLORS[index % COLORS.length] }}></div>
-                                        </div>
+                          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-100">
+                            {Object.keys(results.faceAngles || {}).length > 0 && (
+                              <div>
+                                <p className="text-[10px] uppercase tracking-widest font-bold text-slate-400 mb-3">Face Angles</p>
+                                <div className="space-y-2.5">
+                                  {Object.entries(results.faceAngles).sort(([, a], [, b]) => b - a).map(([angle, count]) => (
+                                    <div key={angle}>
+                                      <div className="flex justify-between text-xs mb-1">
+                                        <span className="font-medium text-slate-600">{angle}</span>
+                                        <span className="font-bold text-slate-800">{count}</span>
                                       </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-                              {Object.keys(results.faceOcclusions || {}).length > 0 && (
-                                <div>
-                                  <h4 className="text-[11px] uppercase font-bold tracking-wider text-slate-500 mb-3 border-b border-slate-200 pb-2">Occlusion Levels</h4>
-                                  <div className="space-y-3">
-                                    {Object.entries(results.faceOcclusions).sort(([,a],[,b])=>b-a).map(([occ, count]) => (
-                                      <div key={occ}>
-                                        <div className="flex justify-between text-xs mb-1">
-                                          <span className="font-medium text-slate-700">{occ}</span>
-                                          <span className="font-bold text-slate-800">{count}</span>
-                                        </div>
-                                        <div className="w-full bg-slate-200 rounded-full h-1.5">
-                                          <div className="h-1.5 rounded-full bg-indigo-400" style={{ width: `${Math.min((count / Math.max(results.groupedMetrics.faces, 1)) * 100, 100)}%` }}></div>
-                                        </div>
+                                      <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                        <div
+                                          className="h-full rounded-full transition-all"
+                                          style={{ width: `${Math.min((count / Math.max(results.groupedMetrics.faces, 1)) * 100, 100)}%`, background: color.bg }}
+                                        />
                                       </div>
-                                    ))}
-                                  </div>
+                                    </div>
+                                  ))}
                                 </div>
-                              )}
-                            </div>
+                              </div>
+                            )}
+                            {Object.keys(results.faceOcclusions || {}).length > 0 && (
+                              <div>
+                                <p className="text-[10px] uppercase tracking-widest font-bold text-slate-400 mb-3">Occlusion Levels</p>
+                                <div className="space-y-2.5">
+                                  {Object.entries(results.faceOcclusions).sort(([, a], [, b]) => b - a).map(([occ, count]) => (
+                                    <div key={occ}>
+                                      <div className="flex justify-between text-xs mb-1">
+                                        <span className="font-medium text-slate-600">{occ}</span>
+                                        <span className="font-bold text-slate-800">{count}</span>
+                                      </div>
+                                      <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                        <div
+                                          className="h-full rounded-full bg-indigo-400 transition-all"
+                                          style={{ width: `${Math.min((count / Math.max(results.groupedMetrics.faces, 1)) * 100, 100)}%` }}
+                                        />
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
@@ -549,79 +570,74 @@ const CvatAnalysis = () => {
           </div>
         )}
 
-        {/* History Section */}
+        {/* ── History ── */}
         {history.length > 0 && (
-          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6 mt-8 animate-in fade-in">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
-              <h2 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
-                <Clock size={18} className="text-slate-500" /> Analysis History
-                <span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded font-medium border border-slate-200 ml-2">
-                  {filteredHistory.length} {filteredHistory.length === 1 ? 'entry' : 'entries'}
-                </span>
-              </h2>
-              <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
-                <div className="relative w-full sm:w-auto">
-                  <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
-                    <Search size={14} className="text-slate-400" />
-                  </div>
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm mt-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between px-5 pt-5 pb-4 border-b border-slate-100 gap-3">
+              <div className="flex items-center gap-2">
+                <Clock size={15} className="text-slate-400" />
+                <span className="font-semibold text-slate-800 text-sm">History</span>
+                <span className="text-[10px] bg-slate-100 text-slate-500 font-bold px-2 py-0.5 rounded-full">{filteredHistory.length}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                   <input
                     type="text"
-                    placeholder="Search file name..."
+                    placeholder="Search…"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="bg-slate-50 border border-slate-200 text-sm text-slate-700 rounded-lg pl-8 pr-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 w-full sm:w-48"
+                    className="text-xs bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-300 w-40"
                   />
                 </div>
-                <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 w-full sm:w-auto">
-                  <Filter size={14} className="text-slate-400 shrink-0" />
+                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5">
+                  <Filter size={12} className="text-slate-400" />
                   <select
                     value={dateFilter}
                     onChange={(e) => setDateFilter(e.target.value)}
-                    className="bg-transparent border-none text-sm text-slate-700 w-full focus:outline-none cursor-pointer"
+                    className="text-xs bg-transparent focus:outline-none cursor-pointer text-slate-600"
                   >
-                    <option value="All Time">All Time</option>
-                    {availableDates.map(date => <option key={date} value={date}>{date}</option>)}
+                    <option value="All Time">All time</option>
+                    {availableDates.map(d => <option key={d} value={d}>{d}</option>)}
                   </select>
                 </div>
               </div>
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm whitespace-nowrap">
-                <thead className="bg-slate-50 border-b border-slate-200">
-                  <tr>
-                    <th className="px-4 py-3 font-medium text-slate-500">Date</th>
-                    <th className="px-4 py-3 font-medium text-slate-500">File Name / Segment</th>
-                    <th className="px-4 py-3 font-medium text-slate-500">Frames</th>
-                    <th className="px-4 py-3 font-medium text-slate-500">Faces</th>
-                    <th className="px-4 py-3 font-medium text-slate-500">L.Eye</th>
-                    <th className="px-4 py-3 font-medium text-slate-500">R.Eye</th>
-                    <th className="px-4 py-3 font-medium text-slate-500">Nose</th>
-                    <th className="px-4 py-3 font-medium text-slate-500">L.Mouth</th>
-                    <th className="px-4 py-3 font-medium text-slate-500">R.Mouth</th>
-                    <th className="px-4 py-3 font-medium text-slate-500 text-right">Actions</th>
+              <table className="w-full text-xs whitespace-nowrap">
+                <thead>
+                  <tr className="text-left border-b border-slate-100">
+                    {['Date', 'File / Segment', 'Frames', 'Annotated', 'Faces', 'L.Eye', 'R.Eye', 'Nose', 'L.Mouth', 'R.Mouth', ''].map(h => (
+                      <th key={h} className="px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">{h}</th>
+                    ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-slate-50">
                   {filteredHistory.map((entry) => (
-                    <tr key={entry.id} className="hover:bg-slate-50 transition-colors bg-white text-xs">
+                    <tr key={entry.id} className="hover:bg-slate-50/70 transition-colors">
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-1.5 text-slate-700">
-                          <Calendar size={12} className="text-slate-400" />
-                          <span>{entry.date}</span>
+                        <div className="flex items-center gap-1.5 text-slate-500">
+                          <Calendar size={11} className="text-slate-300" />
+                          {entry.date}
                         </div>
                       </td>
-                      <td className="px-4 py-3 font-medium text-slate-700 max-w-[200px] truncate" title={entry.fileName}>{entry.fileName}</td>
+                      <td className="px-4 py-3 max-w-[180px] truncate font-medium text-slate-700" title={entry.fileName}>{entry.fileName}</td>
                       <td className="px-4 py-3 text-slate-600">{entry.totalImages}</td>
-                      <td className="px-4 py-3 font-medium text-purple-600">{entry.groupedMetrics.faces}</td>
-                      <td className="px-4 py-3 text-blue-600">{entry.groupedMetrics.eyesLeft}</td>
-                      <td className="px-4 py-3 text-blue-600">{entry.groupedMetrics.eyesRight}</td>
-                      <td className="px-4 py-3 text-orange-600">{entry.groupedMetrics.noses}</td>
-                      <td className="px-4 py-3 text-rose-600">{entry.groupedMetrics.mouthsLeft}</td>
-                      <td className="px-4 py-3 text-pink-600">{entry.groupedMetrics.mouthsRight}</td>
-                      <td className="px-4 py-3 text-right">
-                        <button onClick={() => deleteHistoryEntry(entry.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors" aria-label="Delete">
-                          <Trash2 size={14} />
+                      <td className="px-4 py-3 font-semibold text-emerald-600">{entry.annotatedImages}</td>
+                      <td className="px-4 py-3 font-semibold text-indigo-600">{entry.groupedMetrics.faces}</td>
+                      <td className="px-4 py-3 text-sky-600">{entry.groupedMetrics.eyesLeft}</td>
+                      <td className="px-4 py-3 text-sky-600">{entry.groupedMetrics.eyesRight}</td>
+                      <td className="px-4 py-3 text-amber-600">{entry.groupedMetrics.noses}</td>
+                      <td className="px-4 py-3 text-rose-500">{entry.groupedMetrics.mouthsLeft}</td>
+                      <td className="px-4 py-3 text-pink-500">{entry.groupedMetrics.mouthsRight}</td>
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={() => deleteHistoryEntry(entry.id)}
+                          className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                          aria-label="Delete"
+                        >
+                          <Trash2 size={13} />
                         </button>
                       </td>
                     </tr>
@@ -631,6 +647,7 @@ const CvatAnalysis = () => {
             </div>
           </div>
         )}
+
       </div>
     </div>
   );

@@ -2,16 +2,14 @@ import React from "react";
 import { BarChart2, ListOrdered, Calendar, Eye, Clock } from "lucide-react";
 
 const DashboardStats = ({ dateFilter, finalDisplayEntries, activeTab, setActiveTab }) => {
-  // --- OVERVIEW & SLOT CALCULATION LOGIC ---
   const slotNames = ["11:00 AM", "1:00 PM", "2:00 PM", "5:00 PM", "6:00 PM", "Overtime"];
   const slotData = slotNames.reduce((acc, slot) => ({ ...acc, [slot]: [] }), {});
-  const entriesForSlots = finalDisplayEntries;
-  
-  const totalFramesCompleted = entriesForSlots.length;
-  const totalFacesCompleted = entriesForSlots.reduce((sum, entry) => sum + entry.facesCompleted, 0);
-  const totalTimeSpent = entriesForSlots.reduce((sum, entry) => sum + entry.durationMinutes, 0);
 
-  entriesForSlots.forEach(entry => {
+  const totalFrames = finalDisplayEntries.length;
+  const totalFaces = finalDisplayEntries.reduce((sum, e) => sum + e.facesCompleted, 0);
+  const totalTime = finalDisplayEntries.reduce((sum, e) => sum + e.durationMinutes, 0);
+
+  finalDisplayEntries.forEach(entry => {
     let hours = 0, minutes = 0;
     try {
       const entryTime = new Date(`${entry.date} ${entry.timestamp}`);
@@ -25,112 +23,94 @@ const DashboardStats = ({ dateFilter, finalDisplayEntries, activeTab, setActiveT
         if (modifier === 'PM' && hours < 12) hours += 12;
         if (modifier === 'AM' && hours === 12) hours = 0;
       }
-    } catch (e) {
-      console.error("Time parsing error", e);
-    }
+    } catch (e) { /* ignore */ }
 
-    const timeFloat = hours + (minutes / 60);
-    if (timeFloat <= 11) slotData["11:00 AM"].push(entry);
-    else if (timeFloat <= 13) slotData["1:00 PM"].push(entry);
-    else if (timeFloat <= 14) slotData["2:00 PM"].push(entry);
-    else if (timeFloat <= 17) slotData["5:00 PM"].push(entry);
-    else if (timeFloat <= 18) slotData["6:00 PM"].push(entry);
+    const t = hours + (minutes / 60);
+    if (t <= 11) slotData["11:00 AM"].push(entry);
+    else if (t <= 13) slotData["1:00 PM"].push(entry);
+    else if (t <= 14) slotData["2:00 PM"].push(entry);
+    else if (t <= 17) slotData["5:00 PM"].push(entry);
+    else if (t <= 18) slotData["6:00 PM"].push(entry);
     else slotData["Overtime"].push(entry);
   });
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
-      {/* Tab Header */}
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-lg font-semibold text-slate-800">
-          {dateFilter === "All Time" ? "All Time Performance" : `${dateFilter} Performance`}
-        </h2>
-        
-        <div className="flex bg-slate-100 p-1 rounded-lg">
-          <button 
-            onClick={() => setActiveTab('overview')}
-            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${
-              activeTab === 'overview' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            <BarChart2 size={14} /> Overview
-          </button>
-          <button 
-            onClick={() => setActiveTab('slots')}
-            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${
-              activeTab === 'slots' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            <ListOrdered size={14} /> Slots
-          </button>
+    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-sm font-semibold text-slate-700">
+          {dateFilter === "All Time" ? "All Time" : dateFilter}
+        </p>
+        <div className="flex bg-slate-100 p-0.5 rounded-lg gap-0.5">
+          {[
+            { id: 'overview', icon: BarChart2, label: 'Overview' },
+            { id: 'slots', icon: ListOrdered, label: 'Slots' },
+          ].map(({ id, icon: Icon, label }) => (
+            <button
+              key={id}
+              onClick={() => setActiveTab(id)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                activeTab === id
+                  ? 'bg-white shadow-sm text-indigo-600'
+                  : 'text-slate-400 hover:text-slate-600'
+              }`}
+            >
+              <Icon size={12} /> {label}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* Tab Content 1: Overview */}
+      {/* Overview tab */}
       {activeTab === 'overview' && (
-        <div className="grid grid-cols-3 gap-4 animate-in fade-in duration-200">
-          <div className="bg-blue-50 rounded-xl p-4 flex flex-col justify-between h-24">
-            <div className="flex items-center gap-2 text-slate-500 text-sm">
-              <Calendar size={16} className="text-blue-500" />
-              <span>Frames</span>
+        <div className="grid grid-cols-3 gap-3">
+          {[
+            { icon: Calendar, label: 'Frames', value: totalFrames, color: 'text-indigo-600', bg: 'bg-indigo-50' },
+            { icon: Eye, label: 'Faces', value: totalFaces, color: 'text-purple-600', bg: 'bg-purple-50' },
+            { icon: Clock, label: 'Minutes', value: totalTime, color: 'text-amber-600', bg: 'bg-amber-50' },
+          ].map(({ icon: Icon, label, value, color, bg }) => (
+            <div key={label} className={`${bg} rounded-xl p-4`}>
+              <div className="flex items-center gap-1.5 mb-2">
+                <Icon size={13} className={color} />
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</span>
+              </div>
+              <p className={`text-2xl font-black ${color}`}>{value}</p>
             </div>
-            <span className="text-2xl font-bold text-blue-600">{totalFramesCompleted}</span>
-          </div>
-          <div className="bg-purple-50 rounded-xl p-4 flex flex-col justify-between h-24">
-            <div className="flex items-center gap-2 text-slate-500 text-sm">
-              <Eye size={16} className="text-purple-500" />
-              <span>Faces</span>
-            </div>
-            <span className="text-2xl font-bold text-purple-600">{totalFacesCompleted}</span>
-          </div>
-          <div className="bg-orange-50 rounded-xl p-4 flex flex-col justify-between h-24">
-            <div className="flex items-center gap-2 text-slate-500 text-sm">
-              <Clock size={16} className="text-orange-500" />
-              <span>Time</span>
-            </div>
-            <span className="text-2xl font-bold text-orange-600">{totalTimeSpent}m</span>
-          </div>
+          ))}
         </div>
       )}
 
-      {/* Tab Content 2: Slot Report */}
+      {/* Slots tab */}
       {activeTab === 'slots' && (
-        <div className="overflow-hidden rounded-lg border border-slate-200 animate-in fade-in duration-200">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50 border-b border-slate-200">
-              <tr>
-                <th className="px-4 py-3 font-medium text-slate-600">Time Slot</th>
-                <th className="px-4 py-3 font-medium text-slate-600">Start - End</th>
-                <th className="px-4 py-3 font-medium text-slate-600 text-right">Faces</th>
+        <div className="rounded-xl overflow-hidden border border-slate-100">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-100">
+                <th className="px-3 py-2.5 text-left font-bold text-[10px] uppercase tracking-wider text-slate-400">Slot</th>
+                <th className="px-3 py-2.5 text-left font-bold text-[10px] uppercase tracking-wider text-slate-400">Frames</th>
+                <th className="px-3 py-2.5 text-right font-bold text-[10px] uppercase tracking-wider text-slate-400">Faces</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-50">
               {slotNames.map(slot => {
                 const slotEntries = slotData[slot];
-                if (slotEntries.length === 0) {
-                  return (
-                    <tr key={slot} className="text-slate-400 bg-white">
-                      <td className="px-4 py-3">{slot}</td>
-                      <td className="px-4 py-3">-</td>
-                      <td className="px-4 py-3 text-right">0</td>
-                    </tr>
-                  );
-                }
                 const sorted = [...slotEntries].sort((a, b) => a.id - b.id);
-                const startFrame = sorted[0].frameNumber;
-                const endFrame = sorted[sorted.length - 1].frameNumber;
-                const totalSlotFaces = slotEntries.reduce((sum, e) => sum + e.facesCompleted, 0);
-
+                const faces = slotEntries.reduce((sum, e) => sum + e.facesCompleted, 0);
+                const isEmpty = slotEntries.length === 0;
                 return (
-                  <tr key={slot} className="bg-white hover:bg-slate-50 transition-colors">
-                    <td className="px-4 py-3 font-medium text-slate-700 whitespace-nowrap">{slot}</td>
-                    <td className="px-4 py-3 text-slate-600">
-                      {startFrame} <span className="text-slate-400 mx-1">→</span> {endFrame} 
-                      <span className="ml-2 text-xs text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded">
-                        ({slotEntries.length})
-                      </span>
+                  <tr key={slot} className={isEmpty ? 'opacity-35' : 'hover:bg-slate-50 transition-colors'}>
+                    <td className="px-3 py-2.5 font-semibold text-slate-600">{slot}</td>
+                    <td className="px-3 py-2.5 text-slate-500">
+                      {isEmpty ? '—' : (
+                        <span>
+                          {sorted[0].frameNumber}
+                          <span className="mx-1 text-slate-300">→</span>
+                          {sorted[sorted.length - 1].frameNumber}
+                          <span className="ml-1.5 text-indigo-500 font-medium">({slotEntries.length})</span>
+                        </span>
+                      )}
                     </td>
-                    <td className="px-4 py-3 text-right font-medium text-purple-600">{totalSlotFaces}</td>
+                    <td className="px-3 py-2.5 text-right font-bold text-purple-600">{faces || 0}</td>
                   </tr>
                 );
               })}
