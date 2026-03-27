@@ -551,7 +551,7 @@ const CvatCalculation = () => {
                     setSelectedExportFile("All");
                     setCurrentPage(1);
                   }}
-                  className="bg-slate-50 border border-slate-200 text-sm text-slate-700 rounded-lg px-2 py-1.5 focus:outline-none cursor-pointer w-36"
+                  className="bg-slate-50 border border-slate-200 text-sm text-slate-700 rounded-lg px-2 py-1.5 focus:outline-none cursor-pointer min-w-[150px] w-auto"
                   aria-label="Filter work history by date"
                 >
                   <option value="All Time">All Time</option>
