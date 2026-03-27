@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   FileVideo,
   Play,
@@ -36,6 +37,7 @@ import useLocalStorage from "../../hooks/useLocalStorage";
 import toast, { Toaster } from "react-hot-toast";
 
 const CvatCalculation = () => {
+  const navigate = useNavigate();
   const [isWorking, setIsWorking] = useLocalStorage("cvat_isWorking", false);
   const [startTime, setStartTime] = useLocalStorage("cvat_startTime", null);
   const [frameNumber, setFrameNumber] = useLocalStorage("cvat_frameNumber", "");
@@ -356,6 +358,15 @@ const CvatCalculation = () => {
   return (
     <div className="min-h-screen bg-slate-50 p-8 font-sans text-slate-800">
       <div className="max-w-5xl mx-auto mb-8 text-center relative">
+        <div className="absolute left-0 top-0">
+          <button 
+            onClick={() => navigate('/cvat/analysis')}
+            className="flex items-center gap-2 px-3 py-1.5 text-blue-600 hover:text-blue-700 hover:bg-blue-50 bg-white border border-blue-200 rounded-lg shadow-sm transition-all font-medium text-sm"
+            title="XML Analysis Tool"
+          >
+            <BarChart2 size={16} /> Analysis Tool
+          </button>
+        </div>
         <div className="absolute right-0 top-0">
           <button 
             onClick={() => openModal("SETTINGS")}
@@ -387,7 +398,7 @@ const CvatCalculation = () => {
             </h2>
 
             <div className="mb-6">
-              <label className="block text-sm font-medium text-slate-700 mb-1 flex items-center gap-2">
+              <label className="text-sm font-medium text-slate-700 mb-1 flex items-center gap-2">
                 <Folder size={16} className="text-slate-500" /> Current File
               </label>
               <input

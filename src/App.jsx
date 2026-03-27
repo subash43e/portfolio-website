@@ -18,6 +18,7 @@ import BlogManagement from "./components/blog/BlogManagement";
 import BlogEdit from "./components/blog/BlogEdit";
 import { StoreProvider } from "./contexts/StoreContext";
 import CvatCalculation from "./components/pages/Cvat";
+import CvatAnalysis from "./components/pages/cvat/CvatAnalysis";
 
 // Lazy load components for code splitting
 const Home = lazy(() => import("./components/pages/Home"));
@@ -54,6 +55,7 @@ function AppContent() {
           <Route path="/blog" element={<Blog />} />
           <Route path="/blog/:id" element={<BlogDetail />} />
           <Route path="/cvat" element={<CvatCalculation />} />
+          <Route path="/cvat/analysis" element={<CvatAnalysis />} />
           <Route
             path="/owner"
             element={
