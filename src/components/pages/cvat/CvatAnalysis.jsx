@@ -8,8 +8,64 @@ import { parseCVATXML, getTotalFrameCount } from "./cvatParser";
 import { useNavigate } from "react-router-dom";
 import useLocalStorage from "../../../hooks/useLocalStorage";
 
-const posToFrame = (posPercent, maxFrame) =>
-  Math.round((posPercent / 100) * maxFrame);
+const SNAP_FRAMES = [
+  0, 36, 72, 108, 144, 180, 216, 252, 288, 323, 359, 395, 431, 467, 503, 539, 575,
+  611, 647, 683, 719, 755, 791, 827, 863, 899, 934, 970, 1006, 1042, 1078, 1114,
+  1150, 1186, 1222, 1258, 1294, 1330, 1366, 1402, 1438, 1474, 1510, 1545, 1581,
+  1617, 1653, 1689, 1725, 1761, 1796
+];
+
+// Helper to get dynamically generated snap frames up to max frame
+const getDynamicSnapFrames = (maxFr) => {
+  const frames = [...SNAP_FRAMES];
+  let lastFrame = frames[frames.length - 1];
+  while (lastFrame < maxFr) {
+    lastFrame += 36;
+    frames.push(lastFrame);
+  }
+  return frames;
+};
+
+const snapPercent = (rawPct, maxFr) => {
+  if (maxFr <= 0) return rawPct;
+  const rawFrame = (rawPct / 100) * maxFr;
+  let closestFrame = Math.round(rawFrame);
+  let minDiff = Infinity;
+  
+  const currentSnapFrames = getDynamicSnapFrames(maxFr);
+
+  for (const sf of currentSnapFrames) {
+    if (sf > maxFr) continue;
+    const diff = Math.abs(sf - rawFrame);
+    if (diff < minDiff) {
+      minDiff = diff;
+      closestFrame = sf;
+    }
+  }
+  const snappedPct = (closestFrame / maxFr) * 100;
+  return Math.max(0.1, Math.min(99.9, snappedPct));
+};
+
+const posToFrame = (posPercent, maxFrame) => {
+  if (posPercent >= 99.9) return maxFrame;
+  if (posPercent <= 0.1) return 0;
+  
+  const rawFrame = Math.round((posPercent / 100) * maxFrame);
+  let closestFrame = rawFrame;
+  let minDiff = Infinity;
+  
+  const currentSnapFrames = getDynamicSnapFrames(maxFrame);
+
+  for (const sf of currentSnapFrames) {
+    if (sf > maxFrame) continue;
+    const diff = Math.abs(sf - rawFrame);
+    if (diff < minDiff) {
+      minDiff = diff;
+      closestFrame = sf;
+    }
+  }
+  return closestFrame;
+};
 
 // A refined, accessible 10-hue palette — distinct but harmonious
 const PALETTE = [
@@ -27,85 +83,140 @@ const PALETTE = [
 
 const CvatAnalysis = () => {
   const [isDragging, setIsDragging] = useState(false);
-  const [fileInfo, setFileInfo] = useLocalStorage("cvat_current_fileInfo", null);
-  const [rawXml, setRawXml] = useLocalStorage("cvat_current_rawXml", null);
-  const [maxFrame, setMaxFrame] = useLocalStorage("cvat_current_maxFrame", 0);
-  const [dividers, setDividers] = useLocalStorage("cvat_current_dividers", []);
-  const [numSegments, setNumSegments] = useState(1);
+  
+  // Single-session multi-file state arrays
+  const [uploadedFiles, setUploadedFiles] = useState([]);
+  const [activeFileId, setActiveFileId] = useState(null);
+  
   const [hoveredSegIdx, setHoveredSegIdx] = useState(null);
-  const [segmentResults, setSegmentResults] = useState([]);
-  const [fullStats, setFullStats] = useLocalStorage("cvat_current_fullStats", null);
   const [error, setError] = useState(null);
   const [history, setHistory] = useLocalStorage("cvat_analysis_history", []);
   const [searchQuery, setSearchQuery] = useState("");
   const [dateFilter, setDateFilter] = useState("All Time");
+  const [manualInput, setManualInput] = useState("");
+
+  const activeFileIdRef = useRef(activeFileId);
+  useEffect(() => { activeFileIdRef.current = activeFileId; }, [activeFileId]);
+
+  // Derived state mapping for the active file
+  const activeFile = uploadedFiles.find(f => f.id === activeFileId) || null;
+  const fileInfo = activeFile?.fileInfo || null;
+  const rawXml = activeFile?.rawXml || null;
+  const maxFrame = activeFile?.maxFrame || 0;
+  const dividers = activeFile?.dividers || [];
+  const fullStats = activeFile?.fullStats || null;
+  const segmentResults = activeFile?.segmentResults || [];
+
+  const updateActiveFile = useCallback((updates) => {
+    setUploadedFiles(prev => prev.map(f => {
+      if (f.id === activeFileIdRef.current) {
+        const newProps = typeof updates === 'function' ? updates(f) : updates;
+        return { ...f, ...newProps };
+      }
+      return f;
+    }));
+  }, []);
 
   const fileInputRef = useRef(null);
   const timelineRef = useRef(null);
   const draggingIdx = useRef(null);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    if (fileInfo) setNumSegments(dividers.length + 1);
-  }, [fileInfo]); // eslint-disable-line
-
   // --- File Upload ---
-  const processFile = async (file) => {
+  const processFiles = async (fileList) => {
     setError(null);
-    if (!file) return;
-    const lowerName = file.name.toLowerCase();
-    if (!lowerName.endsWith('.xml') && !lowerName.endsWith('.zip')) {
-      setError("Please upload a valid CVAT XML or ZIP file.");
-      return;
-    }
-    if (file.size > 104857600) {
-      setError("File is too large (max 100MB).");
-      return;
-    }
-    try {
-      let xmlContent = "";
-      if (lowerName.endsWith('.zip')) {
-        const zip = await JSZip.loadAsync(file);
-        let xmlFile = zip.file("annotations.xml");
-        if (!xmlFile) {
-          const allXml = Object.keys(zip.files).filter(n =>
-            n.toLowerCase().endsWith('.xml') && !zip.files[n].dir &&
-            !n.includes('__MACOSX') && !n.split('/').pop().startsWith('._')
-          );
-          if (allXml.length > 0) {
-            const ann = allXml.find(n => n.toLowerCase().endsWith('annotations.xml'));
-            xmlFile = zip.file(ann || allXml[0]);
-          }
-        }
-        if (!xmlFile) throw new Error("No XML found inside ZIP.");
-        xmlContent = await xmlFile.async("string");
-      } else {
-        xmlContent = await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = (e) => resolve(e.target.result);
-          reader.onerror = () => reject(new Error("Failed to read file."));
-          reader.readAsText(file);
-        });
+    if (!fileList || fileList.length === 0) return;
+    
+    // We parse in sequence to maintain order and show loading state if needed
+    const newFiles = [];
+    let firstNewId = null;
+
+    for (let i = 0; i < fileList.length; i++) {
+      const file = fileList[i];
+      const lowerName = file.name.toLowerCase();
+      
+      // Skip duplicate files safely
+      if (uploadedFiles.some(f => f.fileInfo.fileName === file.name) || newFiles.some(f => f.fileInfo.fileName === file.name)) {
+        setError(p => (p ? p + '\n' : '') + `Skipped ${file.name}: Already uploaded`);
+        continue;
       }
-      const { maxFrameId } = getTotalFrameCount(xmlContent);
-      const full = parseCVATXML(xmlContent);
-      setRawXml(xmlContent);
-      setMaxFrame(maxFrameId);
-      setFullStats(full);
-      setFileInfo({ fileName: file.name, totalSize: file.size });
-      setDividers([]);
-      setNumSegments(1);
-      setSegmentResults([]);
-    } catch (err) {
-      setError(err.message || "Failed to parse file.");
+
+      if (!lowerName.endsWith('.xml') && !lowerName.endsWith('.zip')) {
+        setError(p => (p ? p + '\n' : '') + `Skipped ${file.name}: Not XML/ZIP`);
+        continue;
+      }
+      if (file.size > 104857600) {
+        setError(p => (p ? p + '\n' : '') + `Skipped ${file.name}: Exceeds 100MB`);
+        continue;
+      }
+      
+      try {
+        let xmlContent = "";
+        if (lowerName.endsWith('.zip')) {
+          const zip = await JSZip.loadAsync(file);
+          let xmlFile = zip.file("annotations.xml");
+          if (!xmlFile) {
+            const allXml = Object.keys(zip.files).filter(n =>
+              n.toLowerCase().endsWith('.xml') && !zip.files[n].dir &&
+              !n.includes('__MACOSX') && !n.split('/').pop().startsWith('._')
+            );
+            if (allXml.length > 0) {
+              const ann = allXml.find(n => n.toLowerCase().endsWith('annotations.xml'));
+              xmlFile = zip.file(ann || allXml[0]);
+            }
+          }
+          if (!xmlFile) throw new Error("No XML found inside ZIP.");
+          xmlContent = await xmlFile.async("string");
+        } else {
+          xmlContent = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(e.target.result);
+            reader.onerror = () => reject(new Error("Failed to read file."));
+            reader.readAsText(file);
+          });
+        }
+        
+        const { maxFrameId } = getTotalFrameCount(xmlContent);
+        const full = parseCVATXML(xmlContent);
+        const id = Date.now().toString() + "_" + i + Math.random().toString(36).slice(2, 6);
+        
+        if (!firstNewId) firstNewId = id;
+        
+        newFiles.push({
+          id,
+          fileInfo: { fileName: file.name, totalSize: file.size },
+          rawXml: xmlContent,
+          maxFrame: maxFrameId,
+          fullStats: full,
+          dividers: [],
+          segmentResults: [{
+            startFrame: 0,
+            endFrame: maxFrameId,
+            startPct: 0,
+            endPct: 100,
+            label: 'S1',
+            results: full
+          }]
+        });
+      } catch (err) {
+        setError(p => (p ? p + '\n' : '') + `Failed ${file.name}: ${err.message}`);
+      }
+    }
+
+    if (newFiles.length > 0) {
+      setUploadedFiles(prev => [...prev, ...newFiles]);
+      if (!activeFileId) setActiveFileId(firstNewId);
     }
   };
 
-  const handleReset = () => {
-    setFileInfo(null); setRawXml(null); setMaxFrame(0);
-    setFullStats(null); setDividers([]); setNumSegments(1);
-    setSegmentResults([]); setError(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
+  const removeFile = (id) => {
+    setUploadedFiles(prev => {
+      const filtered = prev.filter(f => f.id !== id);
+      if (activeFileId === id) {
+        setActiveFileId(filtered.length > 0 ? filtered[0].id : null);
+      }
+      return filtered;
+    });
   };
 
   // --- Timeline drag ---
@@ -117,43 +228,51 @@ const CvatAnalysis = () => {
   }, []);
 
   const handleDividerMouseDown = (e, idx) => {
+    if (!activeFile) return;
     e.preventDefault();
     draggingIdx.current = idx;
     const onMove = (mv) => {
-      const pct = getBarPercent(mv.clientX);
-      setDividers(prev => {
-        const next = [...prev];
-        const minLeft = idx > 0 ? prev[idx - 1] + 1 : 1;
-        const maxRight = idx < prev.length - 1 ? prev[idx + 1] - 1 : 99;
+      const rawPct = getBarPercent(mv.clientX);
+      const pct = snapPercent(rawPct, maxFrame);
+      updateActiveFile(prevFile => {
+        const next = [...prevFile.dividers];
+        const minLeft = idx > 0 ? prevFile.dividers[idx - 1] + 0.1 : 0.1;
+        const maxRight = idx < prevFile.dividers.length - 1 ? prevFile.dividers[idx + 1] - 0.1 : 99.9;
         next[idx] = Math.max(minLeft, Math.min(maxRight, pct));
-        return next;
+        return { dividers: next };
       });
     };
     const onUp = () => {
       draggingIdx.current = null;
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
-      setSegmentResults([]);
+      updateActiveFile(prevFile => ({
+        segmentResults: calculateResults(prevFile.dividers, prevFile.maxFrame, prevFile.rawXml)
+      }));
     };
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
   };
 
   const handleDividerTouchStart = (e, idx) => {
+    if (!activeFile) return;
     const onMove = (tv) => {
-      const pct = getBarPercent(tv.touches[0].clientX);
-      setDividers(prev => {
-        const next = [...prev];
-        const minLeft = idx > 0 ? prev[idx - 1] + 1 : 1;
-        const maxRight = idx < prev.length - 1 ? prev[idx + 1] - 1 : 99;
+      const rawPct = getBarPercent(tv.touches[0].clientX);
+      const pct = snapPercent(rawPct, maxFrame);
+      updateActiveFile(prevFile => {
+        const next = [...prevFile.dividers];
+        const minLeft = idx > 0 ? prevFile.dividers[idx - 1] + 0.1 : 0.1;
+        const maxRight = idx < prevFile.dividers.length - 1 ? prevFile.dividers[idx + 1] - 0.1 : 99.9;
         next[idx] = Math.max(minLeft, Math.min(maxRight, pct));
-        return next;
+        return { dividers: next };
       });
     };
     const onEnd = () => {
       window.removeEventListener('touchmove', onMove);
       window.removeEventListener('touchend', onEnd);
-      setSegmentResults([]);
+      updateActiveFile(prevFile => ({
+        segmentResults: calculateResults(prevFile.dividers, prevFile.maxFrame, prevFile.rawXml)
+      }));
     };
     window.addEventListener('touchmove', onMove, { passive: true });
     window.addEventListener('touchend', onEnd);
@@ -162,41 +281,42 @@ const CvatAnalysis = () => {
   const handleDeleteSegment = (i) => {
     if (dividers.length === 0) return;
     const divIdx = i < dividers.length ? i : i - 1;
-    setDividers(prev => prev.filter((_, idx) => idx !== divIdx));
-    setNumSegments(prev => Math.max(1, prev - 1));
-    setSegmentResults([]);
+    updateActiveFile(prevFile => {
+      const newDivs = prevFile.dividers.filter((_, idx) => idx !== divIdx);
+      return {
+        dividers: newDivs,
+        segmentResults: calculateResults(newDivs, prevFile.maxFrame, prevFile.rawXml)
+      };
+    });
   };
 
   // Build segments from divider positions
-  const getSegments = () => {
-    const positions = [0, ...dividers, 100];
+  const buildSegments = (divs, mFrame) => {
+    const positions = [0, ...divs, 100];
     return positions.slice(0, -1).map((start, i) => {
       const end = positions[i + 1];
+      let startFrame = posToFrame(start, mFrame);
+      if (i > 0) startFrame += 1;
+      const endFrame = posToFrame(end, mFrame);
       return {
-        startFrame: posToFrame(start, maxFrame),
-        endFrame: posToFrame(end, maxFrame),
+        startFrame: Math.min(startFrame, endFrame),
+        endFrame,
         startPct: start,
         endPct: end,
         label: `S${i + 1}`,
       };
     });
   };
-  const segments = getSegments();
-
-  // --- Analysis ---
-  const handleAnalyze = () => {
-    if (!rawXml) return;
-    try {
-      setError(null);
-      const results = segments.map(seg => ({
-        ...seg,
-        results: parseCVATXML(rawXml, seg.startFrame, seg.endFrame),
-      }));
-      setSegmentResults(results);
-    } catch (err) {
-      setError(err.message || "Analysis failed.");
-    }
+  
+  const calculateResults = (divs, mFrame, xml) => {
+    if (!xml) return [];
+    return buildSegments(divs, mFrame).map(seg => ({
+      ...seg,
+      results: parseCVATXML(xml, seg.startFrame, seg.endFrame)
+    }));
   };
+  
+  const segments = activeFile ? buildSegments(dividers, maxFrame) : [];
 
   const saveToHistory = () => {
     if (!fileInfo || segmentResults.length === 0) return;
@@ -209,6 +329,26 @@ const CvatAnalysis = () => {
     setHistory(prev => [...entries, ...prev]);
   };
 
+  const handleSaveAllToHistory = () => {
+    if (uploadedFiles.length === 0) return;
+    const entries = [];
+    uploadedFiles.forEach(f => {
+      if (f.segmentResults && f.segmentResults.length > 0) {
+        f.segmentResults.forEach(seg => {
+          entries.push({
+            id: Date.now() + Math.random(),
+            date: new Date().toLocaleDateString(),
+            ...seg.results,
+            fileName: `${f.fileInfo.fileName} [${seg.label}: ${seg.startFrame}–${seg.endFrame}]`,
+          });
+        });
+      }
+    });
+    if (entries.length > 0) {
+      setHistory(prev => [...entries, ...prev]);
+    }
+  };
+
   const deleteHistoryEntry = (id) => setHistory(history.filter(h => h.id !== id));
 
   const availableDates = [...new Set(history.map(h => h.date))].sort((a, b) => new Date(b) - new Date(a));
@@ -218,9 +358,36 @@ const CvatAnalysis = () => {
     return matchesSearch && matchesDate;
   });
 
+  const applyManualRanges = () => {
+    if (!manualInput.trim()) return;
+    const parts = manualInput.split(',').map(s => s.trim()).filter(Boolean);
+    if (parts.length === 0) return; 
+
+    const newDividers = [];
+    for (let i = 0; i < parts.length; i++) {
+      const match = parts[i].match(/\d+/g);
+      if (match) {
+        let frame = parseInt(match[match.length - 1], 10);
+        let pct = (frame / maxFrame) * 100;
+        if (pct >= 99.9) continue;
+        pct = Math.max(0.1, pct);
+        newDividers.push(pct);
+      }
+    }
+    
+    if (newDividers.length > 0) {
+      const unique = [...new Set(newDividers)].sort((a,b) => a - b);
+      updateActiveFile(prevFile => ({
+        dividers: unique,
+        segmentResults: calculateResults(unique, prevFile.maxFrame, prevFile.rawXml)
+      }));
+      setManualInput(""); 
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#f8f9fc] font-sans text-slate-800">
-      <div className="max-w-5xl mx-auto px-5 py-10">
+      <div className="max-w-6xl mx-auto px-5 py-10">
 
         {/* ── Header ── */}
         <div className="flex items-center justify-between mb-10">
@@ -237,56 +404,101 @@ const CvatAnalysis = () => {
           <div className="w-16" /> {/* spacer to center title */}
         </div>
 
-        {/* ── Upload Zone ── */}
-        {!fileInfo && (
-          <div
-            className={`group border-2 border-dashed rounded-2xl px-8 py-20 text-center transition-all duration-200 cursor-pointer
-              ${isDragging ? "border-indigo-400 bg-indigo-50/60 scale-[1.01]" : "border-slate-200 bg-white hover:border-indigo-300 hover:bg-slate-50/80"}`}
-            onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-            onDragLeave={(e) => { e.preventDefault(); setIsDragging(false); }}
-            onDrop={(e) => { e.preventDefault(); setIsDragging(false); processFile(e.dataTransfer.files[0]); }}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <input type="file" accept=".xml,.zip,.XML,.ZIP" className="hidden" ref={fileInputRef}
-              onChange={(e) => processFile(e.target.files[0])} />
-            <div className="flex justify-center mb-5">
-              <div className={`p-5 rounded-2xl transition-colors ${isDragging ? 'bg-indigo-100 text-indigo-500' : 'bg-slate-100 text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-400'}`}>
-                <Upload size={28} />
-              </div>
-            </div>
-            <h3 className="text-base font-semibold text-slate-700 mb-1">Drop your CVAT file here</h3>
-            <p className="text-sm text-slate-400">Supports <code className="text-xs bg-slate-100 px-1 rounded">.xml</code> and <code className="text-xs bg-slate-100 px-1 rounded">.zip</code> · Max 100MB</p>
-            {error && (
-              <div className="inline-flex items-center gap-2 mt-5 text-red-600 bg-red-50 px-4 py-2 rounded-xl border border-red-100 text-sm">
-                <AlertCircle size={15} /> {error}
-              </div>
-            )}
-          </div>
-        )}
+        {/* ── Main Layout ── */}
+        <div className="flex flex-col lg:flex-row gap-6">
 
-        {/* ── After Upload ── */}
-        {fileInfo && (
-          <div className="space-y-5">
+          {/* ── Sidebar (Multi-file manager) ── */}
+          {uploadedFiles.length > 0 && (
+            <div className="w-full lg:w-64 flex-shrink-0 space-y-4">
+              <div
+                className={`group border-2 border-dashed rounded-2xl p-4 text-center cursor-pointer transition-all ${isDragging ? "border-indigo-400 bg-indigo-50/60 scale-[1.02]" : "border-slate-200 bg-white hover:border-indigo-300 hover:bg-slate-50/80"}`}
+                onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                onDragLeave={(e) => { e.preventDefault(); setIsDragging(false); }}
+                onDrop={(e) => { e.preventDefault(); setIsDragging(false); processFiles(e.dataTransfer.files); }}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <input type="file" multiple accept=".xml,.zip,.XML,.ZIP" className="hidden" ref={fileInputRef} onChange={(e) => processFiles(e.target.files)} />
+                <Upload size={20} className="mx-auto text-slate-400 mb-2 group-hover:text-indigo-400 transition-colors" />
+                <p className="text-xs font-semibold text-slate-600">Upload more files...</p>
+              </div>
 
-            {/* File strip */}
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm px-5 py-3.5 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-indigo-50 text-indigo-500 rounded-xl"><FileCode size={16} /></div>
-                <div>
-                  <p className="text-sm font-semibold text-slate-800 leading-tight">{fileInfo.fileName}</p>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    {(fileInfo.totalSize / 1024 / 1024).toFixed(2)} MB &nbsp;·&nbsp;
-                    <span className="font-medium text-slate-600">{maxFrame + 1}</span> total frames
-                  </p>
+              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                <div className="bg-slate-50 px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Uploaded Files ({uploadedFiles.length})</span>
+                </div>
+                <div className="max-h-[60vh] overflow-y-auto p-2 space-y-1">
+                  {uploadedFiles.map((f) => (
+                    <div key={f.id} className="relative group">
+                      <button
+                        onClick={() => setActiveFileId(f.id)}
+                        className={`w-full text-left p-3 rounded-xl transition-all flex items-start gap-3 ${f.id === activeFileId ? 'bg-indigo-50 border border-indigo-100' : 'hover:bg-slate-50 border border-transparent'}`}
+                      >
+                        <FileCode size={16} className={`mt-0.5 flex-shrink-0 ${f.id === activeFileId ? 'text-indigo-500' : 'text-slate-400'}`} />
+                        <div className="min-w-0 flex-1 pr-6">
+                          <p className={`text-xs font-semibold truncate ${f.id === activeFileId ? 'text-indigo-700' : 'text-slate-700'}`}>
+                            {f.fileInfo.fileName}
+                          </p>
+                          <p className={`text-[10px] mt-0.5 ${f.id === activeFileId ? 'text-indigo-400/80' : 'text-slate-400'}`}>
+                            {f.maxFrame + 1} frames {f.segmentResults?.length > 0 ? '· Analyzed ✓' : ''}
+                          </p>
+                        </div>
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); removeFile(f.id); }}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                        title="Remove file"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Bulk Actions Footer */}
+                <div className="bg-white border-t border-slate-100 p-3 space-y-2">
+                  <button
+                    onClick={handleSaveAllToHistory}
+                    disabled={uploadedFiles.every(f => !f.segmentResults || f.segmentResults.length === 0)}
+                    className="w-full flex items-center justify-center gap-2 py-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-xs font-semibold rounded-xl transition-all shadow-sm shadow-indigo-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <CheckCircle2 size={14} /> Save All to History
+                  </button>
                 </div>
               </div>
-              <button
-                onClick={handleReset}
-                className="text-xs text-slate-400 hover:text-red-500 transition-colors px-3 py-1.5 rounded-lg hover:bg-red-50"
-              >
-                Change file
-              </button>
             </div>
+          )}
+
+          {/* ── Right Panel (Active Workspace) ── */}
+          <div className="flex-1 min-w-0">
+            {/* Massive Upload Zone when empty */}
+            {uploadedFiles.length === 0 && (
+              <div
+                className={`group border-2 border-dashed rounded-2xl px-8 py-20 text-center transition-all duration-200 cursor-pointer
+                  ${isDragging ? "border-indigo-400 bg-indigo-50/60 scale-[1.01]" : "border-slate-200 bg-white hover:border-indigo-300 hover:bg-slate-50/80"}`}
+                onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                onDragLeave={(e) => { e.preventDefault(); setIsDragging(false); }}
+                onDrop={(e) => { e.preventDefault(); setIsDragging(false); processFiles(e.dataTransfer.files); }}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <input type="file" multiple accept=".xml,.zip,.XML,.ZIP" className="hidden" ref={fileInputRef} onChange={(e) => processFiles(e.target.files)} />
+                <div className="flex justify-center mb-5">
+                  <div className={`p-5 rounded-2xl transition-colors ${isDragging ? 'bg-indigo-100 text-indigo-500' : 'bg-slate-100 text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-400'}`}>
+                    <Upload size={28} />
+                  </div>
+                </div>
+                <h3 className="text-base font-semibold text-slate-700 mb-1">Drop multiple CVAT files here</h3>
+                <p className="text-sm text-slate-400">Supports multiple <code className="text-xs bg-slate-100 px-1 rounded">.xml</code> and <code className="text-xs bg-slate-100 px-1 rounded">.zip</code> · Max 100MB each</p>
+                {error && (
+                  <div className="inline-flex items-center gap-2 mt-5 text-red-600 bg-red-50 px-4 py-2 rounded-xl border border-red-100 text-sm">
+                    <AlertCircle size={15} /> {error}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Active File Rendering */}
+            {activeFile && (
+              <div className="space-y-5">
 
             {/* Full file overview */}
             {fullStats && (
@@ -314,23 +526,39 @@ const CvatAnalysis = () => {
 
             {/* ── Timeline Segmenter ── */}
             <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-              <div className="flex items-start justify-between mb-1">
+              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-2">
                 <div>
                   <h2 className="text-sm font-bold text-slate-800">Frame Range Segmenter</h2>
                   <p className="text-[11px] text-slate-400 mt-0.5">
-                    Click the timeline to split · Drag handles to resize · Hover to delete
+                    Click timeline to split · Drag handles · Or type manual ranges
                   </p>
                 </div>
-                <span className="text-[10px] font-semibold text-slate-400 bg-slate-100 px-2 py-1 rounded-lg">
-                  {segments.length} {segments.length === 1 ? 'segment' : 'segments'}
-                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    type="text"
+                    placeholder="e.g. 0-545, 546-700"
+                    value={manualInput}
+                    onChange={(e) => setManualInput(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && applyManualRanges()}
+                    className="text-xs px-2.5 py-1.5 border border-slate-200 rounded-lg w-40 md:w-56 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                  />
+                  <button 
+                    onClick={applyManualRanges}
+                    className="text-xs font-semibold bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded-lg hover:bg-indigo-100 transition-colors"
+                  >
+                    Apply
+                  </button>
+                  <span className="text-[10px] font-semibold text-slate-400 bg-slate-100 px-2 py-1.5 rounded-lg ml-1">
+                    {segments.length} {segments.length === 1 ? 'segment' : 'segments'}
+                  </span>
+                </div>
               </div>
 
               {/* Timeline bar — taller for easy interaction */}
               <div className="mt-5 mb-1">
                 <div
                   ref={timelineRef}
-                  className="relative h-16 rounded-xl overflow-visible select-none"
+                  className="relative h-16 rounded-xl overflow-hidden select-none"
                   style={{ background: '#e2e8f0' }}
                 >
                   {/* Segment blocks */}
@@ -340,7 +568,7 @@ const CvatAnalysis = () => {
                     return (
                       <div
                         key={i}
-                        className="absolute top-0 h-full flex flex-col items-center justify-center cursor-pointer transition-all duration-150 overflow-hidden rounded-[inherit]"
+                        className="absolute top-0 h-full flex flex-col items-center justify-center cursor-pointer transition-all duration-150"
                         style={{
                           left: `${seg.startPct}%`,
                           width: `${seg.endPct - seg.startPct}%`,
@@ -354,10 +582,17 @@ const CvatAnalysis = () => {
                           const bar = timelineRef.current;
                           if (!bar) return;
                           const rect = bar.getBoundingClientRect();
-                          const pct = Math.max(0.5, Math.min(99.5, ((e.clientX - rect.left) / rect.width) * 100));
-                          setDividers(prev => [...prev, pct].sort((a, b) => a - b));
-                          setNumSegments(prev => prev + 1);
-                          setSegmentResults([]);
+                          const rawPct = Math.max(0.5, Math.min(99.5, ((e.clientX - rect.left) / rect.width) * 100));
+                          const pct = snapPercent(rawPct, maxFrame);
+                          
+                          updateActiveFile(prevFile => {
+                            if (prevFile.dividers.includes(pct)) return prevFile;
+                            const nextDivs = [...prevFile.dividers, pct].sort((a, b) => a - b);
+                            return {
+                              dividers: nextDivs,
+                              segmentResults: calculateResults(nextDivs, prevFile.maxFrame, prevFile.rawXml)
+                            };
+                          });
                         }}
                       >
                         {/* Hover overlay: dim + show delete */}
@@ -375,14 +610,14 @@ const CvatAnalysis = () => {
                         )}
                         {/* Segment content */}
                         {!isHovered && (
-                          <>
-                            <span className="text-white text-[11px] font-bold drop-shadow select-none leading-tight">
+                          <div className="flex flex-col items-center justify-center whitespace-nowrap pointer-events-none z-10 px-1">
+                            <span className="text-white text-[11px] font-bold drop-shadow-md select-none leading-tight">
                               {seg.label}
                             </span>
-                            <span className="text-white/70 text-[9px] select-none leading-tight font-medium">
-                              {seg.endFrame - seg.startFrame}f
+                            <span className="text-white text-[9px] drop-shadow-md select-none leading-tight font-semibold mt-px">
+                              {seg.endFrame - seg.startFrame + 1}f
                             </span>
-                          </>
+                          </div>
                         )}
                         {/* Hover: show scissors hint */}
                         {isHovered && dividers.length === 0 && (
@@ -402,9 +637,9 @@ const CvatAnalysis = () => {
                       onTouchStart={(e) => handleDividerTouchStart(e, idx)}
                     >
                       {/* Line */}
-                      <div className="w-0.5 h-full bg-white/80 group-hover:bg-white transition-colors shadow-sm" />
+                      <div className="w-[3px] h-full bg-white/40 group-hover:bg-white/80 transition-colors" />
                       {/* Knob */}
-                      <div className="absolute w-4 h-6 bg-white rounded shadow-lg flex flex-col items-center justify-center gap-[3px] group-hover:scale-110 transition-transform">
+                      <div className="absolute w-4 h-6 bg-white rounded shadow-lg flex flex-col items-center justify-center gap-[3px] opacity-0 scale-75 group-hover:opacity-100 group-hover:scale-110 transition-all duration-200">
                         <div className="w-1 h-1 bg-slate-300 rounded-full" />
                         <div className="w-1 h-1 bg-slate-300 rounded-full" />
                         <div className="w-1 h-1 bg-slate-300 rounded-full" />
@@ -420,17 +655,17 @@ const CvatAnalysis = () => {
                     return (
                       <div
                         key={i}
-                        className="absolute text-center"
+                        className="absolute flex flex-col items-center justify-start overflow-visible whitespace-nowrap z-10"
                         style={{ left: `${seg.startPct}%`, width: `${seg.endPct - seg.startPct}%` }}
                       >
-                        <p className="text-[9px] font-mono text-slate-400 truncate px-1">
+                        <p className="text-[9px] font-mono text-slate-500 font-medium px-1 bg-[#f8f9fc]/80 rounded">
                           {seg.startFrame}–{seg.endFrame}
                         </p>
                         {res && (
-                          <p className="text-[9px] text-slate-500 truncate px-1 mt-0.5">
-                            <span className="text-emerald-600 font-semibold">{res.annotatedImages}✓</span>
-                            <span className="mx-1 text-slate-300">·</span>
-                            <span>{res.groupedMetrics.faces}F</span>
+                          <p className="text-[9px] text-slate-600 bg-[#f8f9fc]/80 rounded px-1 mt-0.5">
+                            <span className="text-emerald-600 font-bold">{res.annotatedImages}✓</span>
+                            <span className="mx-1 text-slate-400">·</span>
+                            <span className="font-semibold">{res.groupedMetrics.faces}F</span>
                           </p>
                         )}
                       </div>
@@ -445,23 +680,6 @@ const CvatAnalysis = () => {
                 </div>
               )}
 
-              {/* Actions */}
-              <div className="flex items-center justify-between mt-6 pt-5 border-t border-slate-100">
-                <button
-                  onClick={saveToHistory}
-                  disabled={segmentResults.length === 0}
-                  className="flex items-center gap-2 text-sm text-slate-500 hover:text-indigo-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors px-3 py-2 rounded-xl hover:bg-indigo-50"
-                >
-                  <CheckCircle2 size={15} /> Save to History
-                </button>
-                <button
-                  onClick={handleAnalyze}
-                  className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold rounded-xl text-sm transition-all shadow-sm shadow-indigo-200 hover:shadow-indigo-300"
-                >
-                  <BarChart2 size={15} />
-                  Analyze {segments.length} {segments.length === 1 ? 'Segment' : 'Segments'}
-                </button>
-              </div>
             </div>
 
             {/* ── Segment Results ── */}
@@ -569,6 +787,8 @@ const CvatAnalysis = () => {
             )}
           </div>
         )}
+      </div>
+    </div>
 
         {/* ── History ── */}
         {history.length > 0 && (

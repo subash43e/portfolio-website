@@ -28,7 +28,6 @@ import {
 } from "lucide-react";
 import {
   handleExportCSV,
-  handleExportExcel,
   handleExportPDF,
 } from "./cvat/exportUtils";
 import DashboardStats from "./cvat/DashboardStats";
@@ -556,14 +555,6 @@ const CvatCalculation = () => {
                   aria-label="Export as CSV"
                 >
                   <Download size={13} />
-                </button>
-                <button
-                  onClick={() => handleExportExcel(finalDisplayEntries, dateFilter, selectedExportFile)}
-                  className="w-8 h-8 flex items-center justify-center bg-emerald-50 hover:bg-emerald-100 rounded-xl text-emerald-600 transition-colors"
-                  title="Export Excel"
-                  aria-label="Export as Excel"
-                >
-                  <Table size={13} />
                 </button>
                 <button
                   onClick={() => handleExportPDF(finalDisplayEntries, dateFilter, selectedExportFile)}

@@ -1,6 +1,5 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import * as XLSX from "xlsx";
 
 export const handleExportCSV = (finalDisplayEntries, dateFilter, selectedExportFile) => {
   if (finalDisplayEntries.length === 0) return alert("No data to export!");
@@ -21,24 +20,6 @@ export const handleExportCSV = (finalDisplayEntries, dateFilter, selectedExportF
   document.body.removeChild(link);
 };
 
-export const handleExportExcel = (finalDisplayEntries, dateFilter, selectedExportFile) => {
-  if (finalDisplayEntries.length === 0) return alert("No data to export!");
-  const wsData = finalDisplayEntries.map(entry => ({
-    Date: entry.date,
-    "Start Time": entry.startTimeString || "N/A",
-    "End Time": entry.timestamp,
-    "File Name": entry.fileName,
-    "Frame Number": entry.frameNumber,
-    "Faces Completed": entry.facesCompleted,
-    "Duration (Min)": entry.durationMinutes
-  }));
-  const worksheet = XLSX.utils.json_to_sheet(wsData);
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, "CVAT Data");
-  const dateStrForFile = dateFilter === "All Time" ? "all_time" : dateFilter.replace(/\//g, '-');
-  const safeFileName = selectedExportFile === "All" ? "all_files" : selectedExportFile.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-  XLSX.writeFile(workbook, `cvat_log_${safeFileName}_${dateStrForFile}.xlsx`);
-};
 
 export const handleExportPDF = (finalDisplayEntries, dateFilter, selectedExportFile) => {
   if (finalDisplayEntries.length === 0) return alert("No data to export!");
