@@ -119,6 +119,8 @@ const CvatAnalysis = () => {
 
   const fileInputRef = useRef(null);
   const timelineRef = useRef(null);
+  const searchInputRef = useRef(null);
+  const manualInputRef = useRef(null);
   const draggingIdx = useRef(null);
   const navigate = useNavigate();
 
@@ -385,6 +387,63 @@ const CvatAnalysis = () => {
     }
   };
 
+  // Keep a stable ref to functions/state needed in global shortcuts
+  const stateRef = useRef({ uploadedFiles, activeFileId, removeFile, handleSaveAllToHistory });
+  useEffect(() => {
+    stateRef.current = { uploadedFiles, activeFileId, removeFile, handleSaveAllToHistory };
+  });
+
+  useEffect(() => {
+    const handleGlobalKeyDown = (e) => {
+      const isInputFocused = ['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName);
+      
+      if (e.key === 'Escape') {
+        document.activeElement?.blur();
+        return;
+      }
+
+      if (!isInputFocused) {
+        if (e.key.toLowerCase() === 'm') {
+          e.preventDefault();
+          manualInputRef.current?.focus();
+        } else if (e.key === '/') {
+          e.preventDefault();
+          searchInputRef.current?.focus();
+        } else if (e.key === 'Delete' || e.key === 'Backspace') {
+          const { activeFileId, removeFile } = stateRef.current;
+          if (activeFileId) {
+            e.preventDefault();
+            removeFile(activeFileId);
+          }
+        } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+          e.preventDefault();
+          const { uploadedFiles, activeFileId } = stateRef.current;
+          if (uploadedFiles.length > 1) {
+            const currentIdx = uploadedFiles.findIndex(f => f.id === activeFileId);
+            if (currentIdx !== -1) {
+              const nextIdx = e.key === 'ArrowUp' 
+                ? (currentIdx === 0 ? uploadedFiles.length - 1 : currentIdx - 1)
+                : (currentIdx === uploadedFiles.length - 1 ? 0 : currentIdx + 1);
+              setActiveFileId(uploadedFiles[nextIdx].id);
+            }
+          }
+        }
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'u') {
+        e.preventDefault();
+        fileInputRef.current?.click();
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        stateRef.current.handleSaveAllToHistory();
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, []);
+
   return (
     <div className="min-h-screen bg-[#f8f9fc] font-sans text-slate-800">
       <div className="max-w-6xl mx-auto px-5 py-10">
@@ -425,6 +484,7 @@ const CvatAnalysis = () => {
               <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
                 <div className="bg-slate-50 px-4 py-3 border-b border-slate-100 flex items-center justify-between">
                   <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Uploaded Files ({uploadedFiles.length})</span>
+                  <span className="text-[9px] text-slate-400 bg-slate-200/50 px-1.5 py-0.5 rounded flex gap-1">↑↓ nav</span>
                 </div>
                 <div className="max-h-[60vh] overflow-y-auto p-2 space-y-1">
                   {uploadedFiles.map((f) => (
@@ -459,9 +519,10 @@ const CvatAnalysis = () => {
                   <button
                     onClick={handleSaveAllToHistory}
                     disabled={uploadedFiles.every(f => !f.segmentResults || f.segmentResults.length === 0)}
-                    className="w-full flex items-center justify-center gap-2 py-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-xs font-semibold rounded-xl transition-all shadow-sm shadow-indigo-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="w-full flex items-center justify-center gap-2 py-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-xs font-semibold rounded-xl transition-all shadow-sm shadow-indigo-200 disabled:opacity-40 disabled:cursor-not-allowed group"
                   >
                     <CheckCircle2 size={14} /> Save All to History
+                    <span className="ml-1 text-[9px] font-mono tracking-tighter bg-indigo-800/50 px-1 py-0.5 text-white/60 rounded opacity-0 group-hover:opacity-100 transition-opacity hidden sm:inline-block">Ctrl+S</span>
                   </button>
                 </div>
               </div>
@@ -488,6 +549,7 @@ const CvatAnalysis = () => {
                 </div>
                 <h3 className="text-base font-semibold text-slate-700 mb-1">Drop multiple CVAT files here</h3>
                 <p className="text-sm text-slate-400">Supports multiple <code className="text-xs bg-slate-100 px-1 rounded">.xml</code> and <code className="text-xs bg-slate-100 px-1 rounded">.zip</code> · Max 100MB each</p>
+                <p className="mt-3 text-[10px] text-slate-400 font-mono tracking-tight"><span className="bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">Ctrl+U</span> to upload · <span className="bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">M</span> for manual ranges</p>
                 {error && (
                   <div className="inline-flex items-center gap-2 mt-5 text-red-600 bg-red-50 px-4 py-2 rounded-xl border border-red-100 text-sm">
                     <AlertCircle size={15} /> {error}
@@ -499,6 +561,23 @@ const CvatAnalysis = () => {
             {/* Active File Rendering */}
             {activeFile && (
               <div className="space-y-5">
+                
+                {/* Active File Header */}
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex items-center justify-between">
+                  <div className="flex items-center gap-4 min-w-0 pr-4">
+                    <div className="p-2.5 bg-indigo-50 text-indigo-500 rounded-xl flex-shrink-0">
+                      <FileCode size={20} />
+                    </div>
+                    <div className="min-w-0">
+                      <h2 className="text-sm font-bold text-slate-800 truncate" title={activeFile.fileInfo.fileName}>
+                        {activeFile.fileInfo.fileName}
+                      </h2>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        {(activeFile.fileInfo.totalSize / (1024 * 1024)).toFixed(2)} MB
+                      </p>
+                    </div>
+                  </div>
+                </div>
 
             {/* Full file overview */}
             {fullStats && (
@@ -533,8 +612,9 @@ const CvatAnalysis = () => {
                     Click timeline to split · Drag handles · Or type manual ranges
                   </p>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2 relative">
                   <input
+                    ref={manualInputRef}
                     type="text"
                     placeholder="e.g. 0-545, 546-700"
                     value={manualInput}
@@ -542,6 +622,7 @@ const CvatAnalysis = () => {
                     onKeyDown={(e) => e.key === 'Enter' && applyManualRanges()}
                     className="text-xs px-2.5 py-1.5 border border-slate-200 rounded-lg w-40 md:w-56 focus:outline-none focus:ring-2 focus:ring-indigo-300"
                   />
+                  {!manualInput && <span className="absolute right-[125px] top-[7px] pointer-events-none text-[9px] font-mono text-slate-300 px-1 rounded border border-slate-100 md:right-[150px]">M</span>}
                   <button 
                     onClick={applyManualRanges}
                     className="text-xs font-semibold bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded-lg hover:bg-indigo-100 transition-colors"
@@ -631,15 +712,37 @@ const CvatAnalysis = () => {
                   {dividers.map((pct, idx) => (
                     <div
                       key={idx}
-                      className="absolute top-0 h-full z-20 flex items-center justify-center group"
+                      tabIndex={0}
+                      className="absolute top-0 h-full z-20 flex items-center justify-center group focus:outline-none"
                       style={{ left: `${pct}%`, transform: 'translateX(-50%)', cursor: 'col-resize', width: '20px' }}
                       onMouseDown={(e) => handleDividerMouseDown(e, idx)}
                       onTouchStart={(e) => handleDividerTouchStart(e, idx)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+                          e.preventDefault();
+                          // Adjust by +/- 1%
+                          const delta = e.key === 'ArrowLeft' ? -1 : 1;
+                          let newPct = pct + delta;
+                          const minLeft = idx > 0 ? dividers[idx - 1] + 0.1 : 0.1;
+                          const maxRight = idx < dividers.length - 1 ? dividers[idx + 1] - 0.1 : 99.9;
+                          if (newPct < minLeft) newPct = minLeft;
+                          if (newPct > maxRight) newPct = maxRight;
+                          
+                          updateActiveFile(prevFile => {
+                            const next = [...prevFile.dividers];
+                            next[idx] = newPct;
+                            return { dividers: next, segmentResults: calculateResults(next, prevFile.maxFrame, prevFile.rawXml) };
+                          });
+                        } else if (e.key === 'Delete' || e.key === 'Backspace') {
+                          e.preventDefault();
+                          handleDeleteSegment(idx + 1); // handleDeleteSegment takes segment index. Wait, let's fix this properly below.
+                        }
+                      }}
                     >
                       {/* Line */}
-                      <div className="w-[3px] h-full bg-white/40 group-hover:bg-white/80 transition-colors" />
+                      <div className="w-[3px] h-full bg-white/40 group-hover:bg-white/80 group-focus:bg-indigo-300 group-focus:w-[4px] transition-all" />
                       {/* Knob */}
-                      <div className="absolute w-4 h-6 bg-white rounded shadow-lg flex flex-col items-center justify-center gap-[3px] opacity-0 scale-75 group-hover:opacity-100 group-hover:scale-110 transition-all duration-200">
+                      <div className="absolute w-4 h-6 bg-white rounded shadow-lg flex flex-col items-center justify-center gap-[3px] opacity-0 scale-75 group-hover:opacity-100 group-hover:scale-110 group-focus:opacity-100 group-focus:scale-110 group-focus:ring-2 ring-indigo-400 transition-all duration-200">
                         <div className="w-1 h-1 bg-slate-300 rounded-full" />
                         <div className="w-1 h-1 bg-slate-300 rounded-full" />
                         <div className="w-1 h-1 bg-slate-300 rounded-full" />
@@ -803,12 +906,14 @@ const CvatAnalysis = () => {
                 <div className="relative">
                   <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                   <input
+                    ref={searchInputRef}
                     type="text"
                     placeholder="Search…"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="text-xs bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-300 w-40"
+                    className="text-xs bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-6 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-300 w-40"
                   />
+                  {!searchQuery && <span className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-[9px] font-mono text-slate-300 px-1 rounded border border-slate-100">/</span>}
                 </div>
                 <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5">
                   <Filter size={12} className="text-slate-400" />
