@@ -1,7 +1,8 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import {
   Upload, FileCode, BarChart2, AlertCircle, CheckCircle2,
-  ArrowLeft, Trash2, Calendar, Clock, Search, Filter, Scissors
+  ArrowLeft, Trash2, Calendar, Clock, Search, Filter, Scissors,
+  ShieldCheck, X, Info
 } from "lucide-react";
 import JSZip from "jszip";
 import { parseCVATXML, getTotalFrameCount } from "./cvatParser";
@@ -83,6 +84,7 @@ const PALETTE = [
 
 const CvatAnalysis = () => {
   const [isDragging, setIsDragging] = useState(false);
+  const [showInfoModal, setShowInfoModal] = useState(false);
   
   // Single-session multi-file state arrays
   const [uploadedFiles, setUploadedFiles] = useState([]);
@@ -460,7 +462,15 @@ const CvatAnalysis = () => {
             <h1 className="text-2xl font-bold tracking-tight text-slate-900">CVAT Analysis</h1>
             <p className="text-xs text-slate-400 mt-0.5">Annotation report for <strong>CVAT for Images 1.1</strong></p>
           </div>
-          <div className="w-16" /> {/* spacer to center title */}
+          <div className="w-16 flex justify-end">
+            <button
+              onClick={() => setShowInfoModal(true)}
+              className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
+              title="Security & Privacy Information"
+            >
+              <ShieldCheck size={20} />
+            </button>
+          </div>
         </div>
 
         {/* ── Main Layout ── */}
@@ -974,6 +984,63 @@ const CvatAnalysis = () => {
         )}
 
       </div>
+
+      {showInfoModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={() => setShowInfoModal(false)}></div>
+          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden border border-slate-100 relative z-10">
+            <div className="p-6">
+              <div className="flex justify-between items-start mb-5">
+                <div className="flex items-center gap-3">
+                  <div className="bg-indigo-50 p-3 rounded-2xl text-indigo-600">
+                    <ShieldCheck size={24} />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-800">Security & Privacy</h2>
+                    <p className="text-xs text-slate-500">How your data is handled</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowInfoModal(false)}
+                  className="p-2 text-slate-400 hover:bg-slate-50 hover:text-slate-700 rounded-xl transition-colors shrink-0"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="space-y-4 text-sm text-slate-600 leading-relaxed">
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                  <h3 className="font-semibold text-slate-800 flex items-center gap-2 mb-1.5"><Info size={16} className="text-indigo-500" /> 100% Local Logic</h3>
+                  <p>
+                    All data analysis is computed in real-time, directly within your browser's isolated sandbox. Your files are converted into temporary memory objects and are <strong>never</strong> transmitted to any server. 
+                  </p>
+                </div>
+                <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100">
+                  <h3 className="font-semibold text-slate-800 flex items-center gap-2 mb-1.5"><CheckCircle2 size={16} className="text-emerald-500" /> Hardened Private Session</h3>
+                  <p>
+                    Because this tool is serverless, your privacy is absolute. All progress is kept strictly within your current session. We do not use tracking cookies, analytics scripts, or data-harvesting tools.
+                  </p>
+                </div>
+                <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100">
+                  <h3 className="font-semibold text-slate-800 flex items-center gap-2 mb-1.5"><ShieldCheck size={16} className="text-indigo-500" /> Active Security Policy</h3>
+                  <p>
+                    This page is protected by a strict Content Security Policy (CSP) and military-grade HTTP headers. We have physically disabled the use of your camera, microphone, and location via the browser's Permissions Policy to ensure zero-risk usage.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="p-5 bg-slate-50 border-t border-slate-100 flex justify-end">
+              <button
+                onClick={() => setShowInfoModal(false)}
+                className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold flex-1 rounded-xl transition-all shadow-sm shadow-indigo-200"
+              >
+                I Understand
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };
